@@ -1,12 +1,14 @@
 import type { TaskContractInput } from "@agentready/agent-contracts";
 import { toInputJson } from "../../lib/json.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { TenancyService } from "../tenancy/tenancyService.js";
 import { TaskContractRepository } from "./taskContractRepository.js";
 
 export class TaskContractService {
   constructor(
     private readonly contracts: TaskContractRepository,
-    private readonly audit: AuditRepository
+    private readonly audit: AuditRepository,
+    private readonly tenancy: TenancyService
   ) {}
 
   list(input: { organizationId: string; projectId?: string }) {
@@ -14,6 +16,19 @@ export class TaskContractService {
   }
 
   async create(input: TaskContractInput) {
+    await this.tenancy.requireProject({
+      organizationId: input.organizationId,
+      projectId: input.projectId
+    });
+    await this.tenancy.requireTask({
+      organizationId: input.organizationId,
+      taskId: input.taskId
+    });
+    await this.tenancy.requireAgent({
+      organizationId: input.organizationId,
+      agentId: input.agentId
+    });
+
     const contract = await this.contracts.create({
       organizationId: input.organizationId,
       projectId: input.projectId,

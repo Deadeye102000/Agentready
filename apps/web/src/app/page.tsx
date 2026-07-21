@@ -133,7 +133,7 @@ async function getDashboard(): Promise<DashboardData> {
   const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:4000";
 
   try {
-    const response = await fetch(`${apiBaseUrl}/api/v1/observability/dashboard?organizationId=demo-org`, {
+    const response = await fetch(`${apiBaseUrl}/api/v1/observability/dashboard`, {
       cache: "no-store"
     });
 

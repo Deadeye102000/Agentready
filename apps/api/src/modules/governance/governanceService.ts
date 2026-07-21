@@ -7,6 +7,7 @@ import {
 import { HttpError } from "../../lib/httpError.js";
 import { toInputJson } from "../../lib/json.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { TenancyService } from "../tenancy/tenancyService.js";
 import { GovernanceRepository } from "./governanceRepository.js";
 
 type UpsertApprovalGateInput = z.infer<typeof upsertApprovalGateSchema>;
@@ -15,7 +16,8 @@ type UpsertFeatureFlagInput = z.infer<typeof upsertAgentFeatureFlagSchema>;
 export class GovernanceService {
   constructor(
     private readonly governance: GovernanceRepository,
-    private readonly audit: AuditRepository
+    private readonly audit: AuditRepository,
+    private readonly tenancy: TenancyService
   ) {}
 
   listApprovalGates(input: { organizationId: string }) {
@@ -42,6 +44,11 @@ export class GovernanceService {
   }
 
   async upsertFeatureFlag(input: UpsertFeatureFlagInput) {
+    await this.tenancy.requireAgent({
+      organizationId: input.organizationId,
+      agentId: input.agentId
+    });
+
     const flag = await this.governance.upsertFeatureFlag(input);
 
     await this.audit.create({
@@ -84,6 +91,13 @@ export class GovernanceService {
     }
 
     const approval = await this.governance.reviewApprovalRequest(input);
+    if (!approval) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Approval request was not found for this organization",
+        statusCode: 404
+      });
+    }
 
     await this.audit.create({
       organizationId: approval.organizationId,

@@ -18,7 +18,7 @@ export class TaskContractRepository {
     });
   }
 
-  create(data: Prisma.TaskContractUncheckedCreateInput) {
+  create(data: Prisma.TaskContractUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.taskContract.create({ data });
   }
 

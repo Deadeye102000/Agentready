@@ -54,6 +54,10 @@ export function requireAuth(request: FastifyRequest) {
   return request.authContext;
 }
 
+export function requireOrgContext(request: FastifyRequest) {
+  return requireAuth(request);
+}
+
 export function enforceTenantScope(request: FastifyRequest) {
   const context = requireAuth(request);
   const queryOrganizationId = readOrganizationId(request.query);

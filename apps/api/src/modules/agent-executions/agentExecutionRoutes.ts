@@ -2,7 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { requireOrgContext } from "../auth/authPlugin.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
+import { TenancyRepository } from "../tenancy/tenancyRepository.js";
+import { TenancyService } from "../tenancy/tenancyService.js";
 import { AgentExecutionRepository } from "./agentExecutionRepository.js";
 import { AgentExecutionService } from "./agentExecutionService.js";
 import {
@@ -10,7 +13,6 @@ import {
   createToolCallTraceBodySchema,
   executionListQuerySchema,
   executionParamsSchema,
-  executionTenantQuerySchema,
   updateExecutionBodySchema,
   updateToolCallTraceBodySchema
 } from "./agentExecutionSchemas.js";
@@ -19,22 +21,27 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   const service = new AgentExecutionService(
     new AgentExecutionRepository(app.prisma),
     new GovernanceRepository(app.prisma),
-    new AuditRepository(app.prisma)
+    new AuditRepository(app.prisma),
+    new TenancyService(new TenancyRepository(app.prisma))
   );
 
   app.get("/executions", async (request) => {
-    return service.list(executionListQuerySchema.parse(request.query));
+    const context = requireOrgContext(request);
+    const query = executionListQuerySchema.parse(request.query);
+    return service.list({ ...query, organizationId: context.organizationId });
   });
 
   app.post("/executions", async (request, reply) => {
-    const execution = await service.create(validateBody(createExecutionBodySchema, request.body));
+    const context = requireOrgContext(request);
+    const body = validateBody(createExecutionBodySchema, request.body);
+    const execution = await service.create({ ...body, organizationId: context.organizationId });
     return reply.code(201).send(execution);
   });
 
   app.get("/executions/:id", async (request) => {
+    const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
-    const query = executionTenantQuerySchema.parse(request.query);
-    const execution = await service.get({ id: params.id, organizationId: query.organizationId });
+    const execution = await service.get({ id: params.id, organizationId: context.organizationId });
 
     if (!execution) {
       throw new HttpError({
@@ -48,22 +55,24 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   });
 
   app.patch("/executions/:id", async (request) => {
+    const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
-    const query = executionTenantQuerySchema.parse(request.query);
     const body = validateBody(updateExecutionBodySchema, request.body);
-    return service.transition({ organizationId: query.organizationId, id: params.id, ...body });
+    return service.transition({ organizationId: context.organizationId, id: params.id, ...body });
   });
 
   app.post("/tool-call-traces", async (request, reply) => {
-    const trace = await service.recordToolCall(validateBody(createToolCallTraceBodySchema, request.body));
+    const context = requireOrgContext(request);
+    const body = validateBody(createToolCallTraceBodySchema, request.body);
+    const trace = await service.recordToolCall({ ...body, organizationId: context.organizationId });
     return reply.code(201).send(trace);
   });
 
   app.patch("/tool-call-traces/:id", async (request) => {
+    const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
-    const query = executionTenantQuerySchema.parse(request.query);
     const body = validateBody(updateToolCallTraceBodySchema, request.body);
 
-    return service.updateToolCallTrace({ organizationId: query.organizationId, id: params.id, ...body });
+    return service.updateToolCallTrace({ organizationId: context.organizationId, id: params.id, ...body });
   });
 }

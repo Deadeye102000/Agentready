@@ -4,10 +4,8 @@ export class ObservabilityRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   findOrganization(input: { organizationId: string }) {
-    return this.prisma.organization.findFirst({
-      where: {
-        OR: [{ id: input.organizationId }, { slug: input.organizationId }]
-      },
+    return this.prisma.organization.findUnique({
+      where: { id: input.organizationId },
       select: { id: true, name: true, slug: true }
     });
   }

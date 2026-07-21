@@ -1,12 +1,14 @@
 import type { CreateEvalRunInput } from "@agentready/shared";
 import { toInputJson } from "../../lib/json.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { TenancyService } from "../tenancy/tenancyService.js";
 import { EvalRunRepository } from "./evalRunRepository.js";
 
 export class EvalRunService {
   constructor(
     private readonly evalRuns: EvalRunRepository,
-    private readonly audit: AuditRepository
+    private readonly audit: AuditRepository,
+    private readonly tenancy: TenancyService
   ) {}
 
   list(input: { organizationId: string; projectId?: string; executionId?: string }) {
@@ -14,6 +16,23 @@ export class EvalRunService {
   }
 
   async create(input: CreateEvalRunInput) {
+    await this.tenancy.requireProject({
+      organizationId: input.organizationId,
+      projectId: input.projectId
+    });
+    await this.tenancy.requireExecution({
+      organizationId: input.organizationId,
+      executionId: input.executionId
+    });
+    await this.tenancy.requireContract({
+      organizationId: input.organizationId,
+      contractId: input.contractId
+    });
+    await this.tenancy.requireAgent({
+      organizationId: input.organizationId,
+      agentId: input.agentId
+    });
+
     const finished = ["PASSED", "FAILED", "ERRORED"].includes(input.status);
     const evalRun = await this.evalRuns.create({
       organizationId: input.organizationId,

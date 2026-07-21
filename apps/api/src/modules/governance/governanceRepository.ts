@@ -10,7 +10,7 @@ export class GovernanceRepository {
     });
   }
 
-  upsertApprovalGate(input: Prisma.ApprovalGateUncheckedCreateInput) {
+  upsertApprovalGate(input: Prisma.ApprovalGateUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.approvalGate.upsert({
       where: {
         organizationId_capability: {
@@ -80,7 +80,7 @@ export class GovernanceRepository {
     });
   }
 
-  createApprovalRequest(input: Prisma.ApprovalRequestUncheckedCreateInput) {
+  createApprovalRequest(input: Prisma.ApprovalRequestUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.approvalRequest.create({ data: input });
   }
 
@@ -108,15 +108,25 @@ export class GovernanceRepository {
     });
   }
 
-  reviewApprovalRequest(input: { id: string; status: "APPROVED" | "REJECTED"; reviewedByUserId: string }) {
-    return this.prisma.approvalRequest.update({
-      where: { id: input.id },
+  async reviewApprovalRequest(input: {
+    organizationId: string;
+    id: string;
+    status: "APPROVED" | "REJECTED";
+    reviewedByUserId: string;
+  }) {
+    await this.prisma.approvalRequest.updateMany({
+      where: {
+        id: input.id,
+        organizationId: input.organizationId
+      },
       data: {
         status: input.status,
         reviewedByUserId: input.reviewedByUserId,
         reviewedAt: new Date()
       }
     });
+
+    return this.findApprovalRequest({ organizationId: input.organizationId, id: input.id });
   }
 
   listMcpServers(input: { organizationId: string }) {

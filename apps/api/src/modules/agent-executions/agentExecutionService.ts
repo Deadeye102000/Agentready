@@ -7,6 +7,7 @@ import { HttpError } from "../../lib/httpError.js";
 import { toInputJson } from "../../lib/json.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
+import { TenancyService } from "../tenancy/tenancyService.js";
 import { AgentExecutionRepository } from "./agentExecutionRepository.js";
 import {
   assertExecutionTransition,
@@ -17,7 +18,8 @@ export class AgentExecutionService {
   constructor(
     private readonly executions: AgentExecutionRepository,
     private readonly governance: GovernanceRepository,
-    private readonly audit: AuditRepository
+    private readonly audit: AuditRepository,
+    private readonly tenancy: TenancyService
   ) {}
 
   list(input: { organizationId: string; projectId?: string; status?: AgentExecutionStatus }) {
@@ -25,6 +27,23 @@ export class AgentExecutionService {
   }
 
   async create(input: CreateAgentExecutionInput) {
+    await this.tenancy.requireProject({
+      organizationId: input.organizationId,
+      projectId: input.projectId
+    });
+    await this.tenancy.requireTask({
+      organizationId: input.organizationId,
+      taskId: input.taskId
+    });
+    await this.tenancy.requireContract({
+      organizationId: input.organizationId,
+      contractId: input.contractId
+    });
+    await this.tenancy.requireAgent({
+      organizationId: input.organizationId,
+      agentId: input.agentId
+    });
+
     const execution = await this.executions.create({
       organizationId: input.organizationId,
       projectId: input.projectId,
@@ -81,12 +100,20 @@ export class AgentExecutionService {
 
     const now = new Date();
     const execution = await this.executions.updateStatus({
+      organizationId: input.organizationId,
       id: input.id,
       status: input.status,
       output: input.output === undefined ? undefined : toInputJson(input.output),
       startedAt: existing.startedAt ?? (input.status === "RUNNING" ? now : undefined),
       completedAt: input.completedAt ?? (isTerminalExecutionStatus(input.status) ? now : undefined)
     });
+    if (!execution) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Agent execution was not found",
+        statusCode: 404
+      });
+    }
 
     await this.audit.create({
       organizationId: execution.organizationId,
@@ -102,6 +129,11 @@ export class AgentExecutionService {
   }
 
   async recordToolCall(input: CreateToolCallTraceInput) {
+    await this.tenancy.requireAgent({
+      organizationId: input.organizationId,
+      agentId: input.agentId
+    });
+
     const execution = await this.executions.findById({
       organizationId: input.organizationId,
       id: input.executionId
@@ -223,7 +255,8 @@ export class AgentExecutionService {
       });
     }
 
-    return this.executions.updateTrace({
+    const trace = await this.executions.updateTrace({
+      organizationId: input.organizationId,
       id: input.id,
       status: input.status,
       output: input.output === undefined ? undefined : toInputJson(input.output),
@@ -231,5 +264,14 @@ export class AgentExecutionService {
       latencyMs: input.latencyMs,
       completedAt: ["SUCCEEDED", "FAILED", "BLOCKED"].includes(input.status) ? new Date() : undefined
     });
+    if (!trace) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Tool-call trace was not found for this organization",
+        statusCode: 404
+      });
+    }
+
+    return trace;
   }
 }

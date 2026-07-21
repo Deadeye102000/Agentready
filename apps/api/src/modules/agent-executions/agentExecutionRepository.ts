@@ -21,7 +21,7 @@ export class AgentExecutionRepository {
     });
   }
 
-  create(data: Prisma.AgentExecutionUncheckedCreateInput) {
+  create(data: Prisma.AgentExecutionUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.agentExecution.create({ data });
   }
 
@@ -41,15 +41,19 @@ export class AgentExecutionRepository {
     });
   }
 
-  updateStatus(input: {
+  async updateStatus(input: {
+    organizationId: string;
     id: string;
     status: AgentExecutionStatus;
     output?: Prisma.InputJsonValue;
     startedAt?: Date;
     completedAt?: Date;
   }) {
-    return this.prisma.agentExecution.update({
-      where: { id: input.id },
+    await this.prisma.agentExecution.updateMany({
+      where: {
+        id: input.id,
+        organizationId: input.organizationId
+      },
       data: {
         status: input.status,
         output: input.output,
@@ -57,6 +61,8 @@ export class AgentExecutionRepository {
         completedAt: input.completedAt
       }
     });
+
+    return this.findById({ organizationId: input.organizationId, id: input.id });
   }
 
   findTraceById(input: { organizationId: string; id: string }) {
@@ -68,11 +74,12 @@ export class AgentExecutionRepository {
     });
   }
 
-  createTrace(data: Prisma.ToolCallTraceUncheckedCreateInput) {
+  createTrace(data: Prisma.ToolCallTraceUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.toolCallTrace.create({ data });
   }
 
-  updateTrace(input: {
+  async updateTrace(input: {
+    organizationId: string;
     id: string;
     status: ToolCallStatus;
     output?: Prisma.InputJsonValue;
@@ -80,8 +87,11 @@ export class AgentExecutionRepository {
     latencyMs?: number;
     completedAt?: Date;
   }) {
-    return this.prisma.toolCallTrace.update({
-      where: { id: input.id },
+    await this.prisma.toolCallTrace.updateMany({
+      where: {
+        id: input.id,
+        organizationId: input.organizationId
+      },
       data: {
         status: input.status,
         output: input.output,
@@ -90,5 +100,7 @@ export class AgentExecutionRepository {
         completedAt: input.completedAt
       }
     });
+
+    return this.findTraceById({ organizationId: input.organizationId, id: input.id });
   }
 }

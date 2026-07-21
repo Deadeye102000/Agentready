@@ -20,7 +20,7 @@ export class EvalRunRepository {
     });
   }
 
-  create(data: Prisma.EvalRunUncheckedCreateInput) {
+  create(data: Prisma.EvalRunUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.evalRun.create({ data });
   }
 }

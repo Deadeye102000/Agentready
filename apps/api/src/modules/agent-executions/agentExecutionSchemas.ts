@@ -7,17 +7,12 @@ import {
 import { z } from "zod";
 
 export const executionListQuerySchema = z.object({
-  organizationId: z.string().min(1),
   projectId: z.string().min(1).optional(),
   status: agentExecutionStatusSchema.optional()
 });
 
 export const executionParamsSchema = z.object({
   id: z.string().min(1)
-});
-
-export const executionTenantQuerySchema = z.object({
-  organizationId: z.string().min(1)
 });
 
 export const updateExecutionBodySchema = z.object({
@@ -33,5 +28,5 @@ export const updateToolCallTraceBodySchema = z.object({
   latencyMs: z.number().int().min(0).optional()
 });
 
-export const createExecutionBodySchema = createAgentExecutionSchema;
-export const createToolCallTraceBodySchema = createToolCallTraceSchema;
+export const createExecutionBodySchema = createAgentExecutionSchema.omit({ organizationId: true });
+export const createToolCallTraceBodySchema = createToolCallTraceSchema.omit({ organizationId: true });
