@@ -1,0 +1,470 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../packages/db/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ActorType {
+  USER
+  AGENT
+  SYSTEM
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum AgentExecutionStatus {
+  QUEUED
+  RUNNING
+  WAITING_FOR_APPROVAL
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum ToolCallStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+}
+
+enum EvalRunStatus {
+  QUEUED
+  RUNNING
+  PASSED
+  FAILED
+  ERRORED
+}
+
+enum ApprovalGateMode {
+  AUTOMATIC
+  REQUIRE_APPROVAL
+  BLOCKED
+}
+
+enum FeatureFlagState {
+  ENABLED
+  DISABLED
+}
+
+enum McpServerStatus {
+  PLANNED
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String?
+  passwordHash        String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  memberships         OrganizationMember[]
+  createdTasks        Task[]               @relation("TaskCreatedByUser")
+  reviewedApprovals   ApprovalRequest[]    @relation("ApprovalReviewedByUser")
+  auditLogs           AuditLog[]           @relation("AuditLogUser")
+  idempotencyKeys     IdempotencyKey[]      @relation("IdempotencyKeyUser")
+}
+
+model Organization {
+  id                 String              @id @default(cuid())
+  name               String
+  slug               String              @unique
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  members            OrganizationMember[]
+  agents             AgentIdentity[]
+  apiKeys            ApiKey[]
+  projects           Project[]
+  tasks              Task[]
+  taskContracts      TaskContract[]
+  agentExecutions    AgentExecution[]
+  toolCallTraces     ToolCallTrace[]
+  evalRuns           EvalRun[]
+  approvalGates      ApprovalGate[]
+  agentFeatureFlags  AgentFeatureFlag[]
+  mcpServers         McpServerRegistration[]
+  knowledgeDocuments KnowledgeDocument[]
+  approvalRequests   ApprovalRequest[]
+  auditLogs          AuditLog[]
+  idempotencyKeys    IdempotencyKey[]
+}
+
+model OrganizationMember {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model AgentIdentity {
+  id             String             @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  disabledAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiKeys        ApiKey[]
+  createdTasks   Task[]             @relation("TaskCreatedByAgent")
+  approvalRequests ApprovalRequest[]
+  auditLogs      AuditLog[]
+  idempotencyKeys IdempotencyKey[]   @relation("IdempotencyKeyAgent")
+  taskContracts  TaskContract[]
+  agentExecutions AgentExecution[]
+  toolCallTraces ToolCallTrace[]
+  evalRuns       EvalRun[]
+  featureFlags   AgentFeatureFlag[]
+
+  @@index([organizationId])
+}
+
+model ApiKey {
+  id             String        @id @default(cuid())
+  organizationId String
+  agentId        String
+  name           String
+  keyPrefix      String
+  keyHash        String        @unique
+  scopes         String[]
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent          AgentIdentity @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([agentId])
+  @@index([keyPrefix])
+}
+
+model Project {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  name               String
+  description        String?
+  status             ProjectStatus       @default(ACTIVE)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks              Task[]
+  taskContracts      TaskContract[]
+  agentExecutions    AgentExecution[]
+  evalRuns           EvalRun[]
+  knowledgeDocuments KnowledgeDocument[]
+
+  @@index([organizationId, status])
+}
+
+model Task {
+  id              String         @id @default(cuid())
+  organizationId  String
+  projectId       String
+  title           String
+  description     String?
+  status          TaskStatus     @default(TODO)
+  createdByUserId String?
+  createdByAgentId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdByUser   User?          @relation("TaskCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByAgent  AgentIdentity? @relation("TaskCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  contracts       TaskContract[]
+  agentExecutions AgentExecution[]
+
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([createdByAgentId])
+}
+
+model TaskContract {
+  id             String          @id @default(cuid())
+  organizationId String
+  projectId      String
+  taskId         String?
+  agentId        String?
+  name           String
+  version        Int             @default(1)
+  objective      String
+  inputs         Json            @default("{}")
+  successCriteria Json           @default("[]")
+  allowedTools   String[]        @default([])
+  requiredApprovals String[]     @default([])
+  evalSpec       Json            @default("{}")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task           Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  executions     AgentExecution[]
+  evalRuns       EvalRun[]
+
+  @@unique([organizationId, name, version])
+  @@index([organizationId, projectId])
+  @@index([taskId])
+  @@index([agentId])
+}
+
+model AgentExecution {
+  id              String               @id @default(cuid())
+  organizationId  String
+  projectId       String
+  taskId          String?
+  contractId      String?
+  agentId         String
+  status          AgentExecutionStatus @default(QUEUED)
+  objective       String
+  input           Json                 @default("{}")
+  output          Json?
+  riskScore       Int                  @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task            Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  contract        TaskContract?        @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  agent           AgentIdentity        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  toolCallTraces  ToolCallTrace[]
+  evalRuns        EvalRun[]
+
+  @@index([organizationId, status, createdAt])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([contractId])
+  @@index([agentId])
+}
+
+model ToolCallTrace {
+  id             String         @id @default(cuid())
+  organizationId String
+  executionId    String
+  agentId        String
+  toolName       String
+  status         ToolCallStatus @default(PENDING)
+  input          Json           @default("{}")
+  output         Json?
+  error          String?
+  latencyMs      Int?
+  approvalRequestId String?
+  startedAt      DateTime       @default(now())
+  completedAt    DateTime?
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution      AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  agent          AgentIdentity  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  approvalRequest ApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startedAt])
+  @@index([executionId])
+  @@index([agentId])
+  @@index([toolName, status])
+  @@index([approvalRequestId])
+}
+
+model EvalRun {
+  id             String          @id @default(cuid())
+  organizationId String
+  projectId      String
+  executionId    String?
+  contractId     String?
+  agentId        String?
+  name           String
+  status         EvalRunStatus   @default(QUEUED)
+  score          Float?
+  threshold      Float           @default(1)
+  checks         Json            @default("[]")
+  findings       Json            @default("[]")
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  execution      AgentExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  contract       TaskContract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([projectId])
+  @@index([executionId])
+  @@index([contractId])
+  @@index([agentId])
+}
+
+model ApprovalGate {
+  id             String           @id @default(cuid())
+  organizationId String
+  capability     String
+  mode           ApprovalGateMode @default(REQUIRE_APPROVAL)
+  reason         String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, capability])
+  @@index([organizationId, mode])
+}
+
+model AgentFeatureFlag {
+  id             String           @id @default(cuid())
+  organizationId String
+  agentId        String?
+  capability     String
+  state          FeatureFlagState @default(DISABLED)
+  description    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent          AgentIdentity?   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, agentId, capability])
+  @@index([organizationId, state])
+  @@index([agentId])
+}
+
+model McpServerRegistration {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  baseUrl        String?
+  status         McpServerStatus @default(PLANNED)
+  capabilities   String[]        @default([])
+  metadata       Json            @default("{}")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+}
+
+model KnowledgeDocument {
+  id             String       @id @default(cuid())
+  organizationId String
+  projectId      String?
+  title          String
+  content        String
+  contentType    String       @default("text/markdown")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+model ApprovalRequest {
+  id              String         @id @default(cuid())
+  organizationId  String
+  agentId         String
+  requestedAction String
+  reason          String
+  payload         Json
+  status          ApprovalStatus @default(PENDING)
+  expiresAt       DateTime?
+  reviewedByUserId String?
+  reviewedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent           AgentIdentity  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  reviewedByUser  User?          @relation("ApprovalReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  toolCallTraces  ToolCallTrace[]
+
+  @@index([organizationId, status])
+  @@index([agentId])
+  @@index([reviewedByUserId])
+}
+
+model AuditLog {
+  id             String         @id @default(cuid())
+  organizationId String
+  actorType      ActorType
+  actorUserId    String?
+  actorAgentId   String?
+  action         String
+  targetType     String
+  targetId       String?
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUser      User?          @relation("AuditLogUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorAgent     AgentIdentity? @relation(fields: [actorAgentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorUserId])
+  @@index([actorAgentId])
+  @@index([targetType, targetId])
+}
+
+model IdempotencyKey {
+  id              String         @id @default(cuid())
+  organizationId  String
+  key             String
+  requestHash     String
+  route           String
+  actorType       ActorType
+  actorUserId     String?
+  actorAgentId    String?
+  responseStatus  Int?
+  responseBody    Json?
+  lockedUntil     DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUser       User?          @relation("IdempotencyKeyUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorAgent      AgentIdentity? @relation("IdempotencyKeyAgent", fields: [actorAgentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, expiresAt])
+  @@index([actorUserId])
+  @@index([actorAgentId])
+}

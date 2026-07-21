@@ -1,0 +1,235 @@
+import type { AgentExecutionStatus, ToolCallStatus } from "@agentready/db";
+import type {
+  CreateAgentExecutionInput,
+  CreateToolCallTraceInput
+} from "@agentready/shared";
+import { HttpError } from "../../lib/httpError.js";
+import { toInputJson } from "../../lib/json.js";
+import { AuditRepository } from "../audit/auditRepository.js";
+import { GovernanceRepository } from "../governance/governanceRepository.js";
+import { AgentExecutionRepository } from "./agentExecutionRepository.js";
+import {
+  assertExecutionTransition,
+  isTerminalExecutionStatus
+} from "./executionStateMachine.js";
+
+export class AgentExecutionService {
+  constructor(
+    private readonly executions: AgentExecutionRepository,
+    private readonly governance: GovernanceRepository,
+    private readonly audit: AuditRepository
+  ) {}
+
+  list(input: { organizationId: string; projectId?: string; status?: AgentExecutionStatus }) {
+    return this.executions.list(input);
+  }
+
+  async create(input: CreateAgentExecutionInput) {
+    const execution = await this.executions.create({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      contractId: input.contractId,
+      agentId: input.agentId,
+      status: "QUEUED",
+      objective: input.objective,
+      input: toInputJson(input.input),
+      riskScore: input.riskScore
+    });
+
+    await this.audit.create({
+      organizationId: input.organizationId,
+      actorType: "AGENT",
+      actorAgentId: input.agentId,
+      action: "agent_execution.created",
+      targetType: "AgentExecution",
+      targetId: execution.id,
+      metadata: toInputJson({
+        contractId: input.contractId,
+        taskId: input.taskId,
+        workerReady: true
+      })
+    });
+
+    return execution;
+  }
+
+  get(input: { organizationId: string; id: string }) {
+    return this.executions.findById(input);
+  }
+
+  async transition(input: {
+    organizationId: string;
+    id: string;
+    status: AgentExecutionStatus;
+    output?: unknown;
+    completedAt?: Date;
+  }) {
+    const existing = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Agent execution was not found",
+        statusCode: 404
+      });
+    }
+
+    assertExecutionTransition(existing.status, input.status);
+
+    const now = new Date();
+    const execution = await this.executions.updateStatus({
+      id: input.id,
+      status: input.status,
+      output: input.output === undefined ? undefined : toInputJson(input.output),
+      startedAt: existing.startedAt ?? (input.status === "RUNNING" ? now : undefined),
+      completedAt: input.completedAt ?? (isTerminalExecutionStatus(input.status) ? now : undefined)
+    });
+
+    await this.audit.create({
+      organizationId: execution.organizationId,
+      actorType: "AGENT",
+      actorAgentId: execution.agentId,
+      action: "agent_execution.status_changed",
+      targetType: "AgentExecution",
+      targetId: execution.id,
+      metadata: toInputJson({ from: existing.status, to: execution.status })
+    });
+
+    return execution;
+  }
+
+  async recordToolCall(input: CreateToolCallTraceInput) {
+    const execution = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.executionId
+    });
+    if (!execution) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Agent execution was not found for this organization",
+        statusCode: 404
+      });
+    }
+
+    const featureFlag = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: input.toolName
+    });
+    const gate = await this.governance.findApprovalGate({
+      organizationId: input.organizationId,
+      capability: input.toolName
+    });
+
+    let status: ToolCallStatus = input.status;
+    let error = input.error;
+    let approvalRequestId = input.approvalRequestId;
+
+    if (!featureFlag || featureFlag.state === "DISABLED") {
+      status = "BLOCKED";
+      error = `Capability ${input.toolName} is disabled for this agent.`;
+    } else if (gate?.mode === "BLOCKED") {
+      status = "BLOCKED";
+      error = gate.reason ?? `Capability ${input.toolName} is blocked by policy.`;
+    } else if (gate?.mode === "REQUIRE_APPROVAL" && status !== "BLOCKED") {
+      const approval = await this.governance.createApprovalRequest({
+        organizationId: input.organizationId,
+        agentId: input.agentId,
+        requestedAction: input.toolName,
+        reason: gate.reason ?? `Capability ${input.toolName} requires approval.`,
+        payload: toInputJson({
+          executionId: input.executionId,
+          toolName: input.toolName,
+          input: input.input
+        }),
+        status: "PENDING"
+      });
+      approvalRequestId = approval.id;
+      status = "BLOCKED";
+      error = "Approval required before this tool call can continue.";
+
+      if (execution.status === "RUNNING") {
+        await this.transition({
+          organizationId: input.organizationId,
+          id: execution.id,
+          status: "WAITING_FOR_APPROVAL"
+        });
+      }
+    }
+
+    const completed = ["SUCCEEDED", "FAILED", "BLOCKED"].includes(status);
+    const trace = await this.executions.createTrace({
+      organizationId: input.organizationId,
+      executionId: input.executionId,
+      agentId: input.agentId,
+      toolName: input.toolName,
+      status,
+      input: toInputJson(input.input),
+      output: input.output === undefined ? undefined : toInputJson(input.output),
+      error,
+      latencyMs: input.latencyMs,
+      approvalRequestId,
+      completedAt: completed ? new Date() : undefined
+    });
+
+    await this.audit.create({
+      organizationId: input.organizationId,
+      actorType: "AGENT",
+      actorAgentId: input.agentId,
+      action: "tool_call_trace.recorded",
+      targetType: "ToolCallTrace",
+      targetId: trace.id,
+      metadata: toInputJson({
+        executionId: input.executionId,
+        toolName: input.toolName,
+        status
+      })
+    });
+
+    return trace;
+  }
+
+  updateToolCallTrace(input: {
+    organizationId: string;
+    id: string;
+    status: ToolCallStatus;
+    output?: unknown;
+    error?: string;
+    latencyMs?: number;
+  }) {
+    return this.updateTenantScopedToolCallTrace(input);
+  }
+
+  private async updateTenantScopedToolCallTrace(input: {
+    organizationId: string;
+    id: string;
+    status: ToolCallStatus;
+    output?: unknown;
+    error?: string;
+    latencyMs?: number;
+  }) {
+    const existing = await this.executions.findTraceById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Tool-call trace was not found for this organization",
+        statusCode: 404
+      });
+    }
+
+    return this.executions.updateTrace({
+      id: input.id,
+      status: input.status,
+      output: input.output === undefined ? undefined : toInputJson(input.output),
+      error: input.error,
+      latencyMs: input.latencyMs,
+      completedAt: ["SUCCEEDED", "FAILED", "BLOCKED"].includes(input.status) ? new Date() : undefined
+    });
+  }
+}

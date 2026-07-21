@@ -1,0 +1,20 @@
+{
+  "name": "agentready",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @agentready/web --filter @agentready/api dev",
+    "dev:web": "pnpm --filter @agentready/web dev",
+    "dev:api": "pnpm --filter @agentready/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:validate": "pnpm --filter @agentready/db db:validate",
+    "db:generate": "pnpm --filter @agentready/db db:generate",
+    "db:migrate": "pnpm --filter @agentready/db db:migrate",
+    "db:seed": "pnpm --filter @agentready/db db:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

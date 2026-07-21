@@ -1,0 +1,14 @@
+.codegraphy/*
+node_modules/
+dist/
+.next/
+out/
+.env
+.env.*
+!.env.example
+coverage/
+prisma/generated/
+packages/db/generated/
+packages/db/src/generated/
+pnpm-debug.log*
+*.tsbuildinfo

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentready-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agentready
+      POSTGRES_USER: agentready
+      POSTGRES_PASSWORD: agentready
+    ports:
+      - "5432:5432"
+    volumes:
+      - agentready_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentready -d agentready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  agentready_postgres_data:
