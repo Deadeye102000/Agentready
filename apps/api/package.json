@@ -14,6 +14,8 @@
     "@agentready/db": "workspace:*",
     "@agentready/shared": "workspace:*",
     "@fastify/cors": "^10.0.1",
+    "@fastify/helmet": "^13.1.0",
+    "@fastify/rate-limit": "^11.1.0",
     "fastify": "^5.2.1",
     "zod": "^3.24.1"
   },

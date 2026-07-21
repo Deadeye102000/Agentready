@@ -67,6 +67,29 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Impact: Changing this secret invalidates all signed HTTP-only session cookies.
 - Revisit when: Adding deployment docs or secret management.
 
+## API security env vars are now validated
+
+- New env vars:
+  - `API_BODY_LIMIT_BYTES`
+  - `API_RATE_LIMIT_MAX`
+  - `API_RATE_LIMIT_WINDOW`
+  - `API_AUTH_RATE_LIMIT_MAX`
+  - `API_AUTH_RATE_LIMIT_WINDOW`
+- Current defaults are local-development friendly:
+  - Body limit: `1048576` bytes
+  - Global rate limit: `300` requests per `1 minute`
+  - Auth rate limit: `20` requests per `1 minute`
+- Impact: Invalid values fail API startup during env validation.
+- Revisit when: Adding deployment-specific limits.
+
+## CORS cannot use wildcard origins with credentials
+
+- Current behavior: `API_CORS_ORIGINS` is validated and cannot include `*`.
+- Reason: The API enables credentialed requests for HTTP-only auth cookies.
+- Local default: `API_CORS_ORIGINS="http://localhost:3000"`
+- Impact: Add each frontend origin explicitly for local/staging/production.
+- Revisit when: Adding deployment docs or environment templates.
+
 ## Protected API routes now require auth cookies
 
 - Current behavior: B2B routes under `/api/v1` are protected after auth routes are registered.

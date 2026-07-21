@@ -13,15 +13,37 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     env.NODE_ENV === "production"
   );
 
-  app.post("/auth/register", async (request, reply) => {
-    const session = await service.register(validateBody(registerBodySchema, request.body));
-    return reply.header("Set-Cookie", session.cookie).code(201).send(session.body);
-  });
+  app.post(
+    "/auth/register",
+    {
+      config: {
+        rateLimit: {
+          max: env.API_AUTH_RATE_LIMIT_MAX,
+          timeWindow: env.API_AUTH_RATE_LIMIT_WINDOW
+        }
+      }
+    },
+    async (request, reply) => {
+      const session = await service.register(validateBody(registerBodySchema, request.body));
+      return reply.header("Set-Cookie", session.cookie).code(201).send(session.body);
+    }
+  );
 
-  app.post("/auth/login", async (request, reply) => {
-    const session = await service.login(validateBody(loginBodySchema, request.body));
-    return reply.header("Set-Cookie", session.cookie).send(session.body);
-  });
+  app.post(
+    "/auth/login",
+    {
+      config: {
+        rateLimit: {
+          max: env.API_AUTH_RATE_LIMIT_MAX,
+          timeWindow: env.API_AUTH_RATE_LIMIT_WINDOW
+        }
+      }
+    },
+    async (request, reply) => {
+      const session = await service.login(validateBody(loginBodySchema, request.body));
+      return reply.header("Set-Cookie", session.cookie).send(session.body);
+    }
+  );
 
   app.post("/auth/logout", async (_request, reply) => {
     return reply.header("Set-Cookie", service.createLogoutCookie()).send({ ok: true });
