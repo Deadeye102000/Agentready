@@ -1,13 +1,13 @@
 import type { CreateEvalRunInput } from "@agentready/shared";
 import { toInputJson } from "../../lib/json.js";
-import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { EvalRunRepository } from "./evalRunRepository.js";
 
 export class EvalRunService {
   constructor(
     private readonly evalRuns: EvalRunRepository,
-    private readonly audit: AuditRepository,
+    private readonly audit: AuditService,
     private readonly tenancy: TenancyService
   ) {}
 
@@ -50,18 +50,25 @@ export class EvalRunService {
       completedAt: finished ? new Date() : undefined
     });
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "SYSTEM",
+      source: "SYSTEM",
       action: "eval_run.created",
-      targetType: "EvalRun",
-      targetId: evalRun.id,
-      metadata: toInputJson({
+      resourceType: "EvalRun",
+      resourceId: evalRun.id,
+      after: {
+        status: evalRun.status,
+        score: evalRun.score,
+        threshold: evalRun.threshold,
+        executionId: evalRun.executionId,
+        contractId: evalRun.contractId
+      },
+      metadata: {
         executionId: input.executionId,
         contractId: input.contractId,
         status: input.status,
         score: input.score
-      })
+      }
     });
 
     return evalRun;

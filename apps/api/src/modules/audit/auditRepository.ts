@@ -26,4 +26,16 @@ export class AuditRepository {
       }
     });
   }
+
+  listRecent(input: { organizationId: string; limit: number }) {
+    return this.prisma.auditLog.findMany({
+      where: { organizationId: input.organizationId },
+      include: {
+        actorUser: { select: { id: true, email: true, name: true } },
+        actorAgent: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take: input.limit
+    });
+  }
 }

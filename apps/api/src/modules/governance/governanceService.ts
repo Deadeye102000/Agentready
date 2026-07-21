@@ -5,8 +5,8 @@ import {
   upsertApprovalGateSchema
 } from "@agentready/shared";
 import { HttpError } from "../../lib/httpError.js";
-import { toInputJson } from "../../lib/json.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { GovernanceRepository } from "./governanceRepository.js";
 
@@ -16,7 +16,7 @@ type UpsertFeatureFlagInput = z.infer<typeof upsertAgentFeatureFlagSchema>;
 export class GovernanceService {
   constructor(
     private readonly governance: GovernanceRepository,
-    private readonly audit: AuditRepository,
+    private readonly audit: AuditService,
     private readonly tenancy: TenancyService
   ) {}
 
@@ -24,16 +24,23 @@ export class GovernanceService {
     return this.governance.listApprovalGates(input);
   }
 
-  async upsertApprovalGate(input: UpsertApprovalGateInput) {
+  async upsertApprovalGate(input: UpsertApprovalGateInput & { actorUserId?: string }) {
+    const before = await this.governance.findApprovalGate({
+      organizationId: input.organizationId,
+      capability: input.capability
+    });
     const gate = await this.governance.upsertApprovalGate(input);
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "SYSTEM",
+      source: "HUMAN",
+      actorUserId: input.actorUserId,
       action: "approval_gate.upserted",
-      targetType: "ApprovalGate",
-      targetId: gate.id,
-      metadata: toInputJson({ capability: input.capability, mode: input.mode })
+      resourceType: "ApprovalGate",
+      resourceId: gate.id,
+      before,
+      after: gate,
+      metadata: { capability: input.capability, mode: input.mode }
     });
 
     return gate;
@@ -43,25 +50,33 @@ export class GovernanceService {
     return this.governance.listFeatureFlags(input);
   }
 
-  async upsertFeatureFlag(input: UpsertFeatureFlagInput) {
+  async upsertFeatureFlag(input: UpsertFeatureFlagInput & { actorUserId?: string }) {
     await this.tenancy.requireAgent({
       organizationId: input.organizationId,
       agentId: input.agentId
     });
 
+    const before = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: input.capability
+    });
     const flag = await this.governance.upsertFeatureFlag(input);
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "SYSTEM",
+      source: "HUMAN",
+      actorUserId: input.actorUserId,
       action: "feature_flag.upserted",
-      targetType: "AgentFeatureFlag",
-      targetId: flag.id,
-      metadata: toInputJson({
+      resourceType: "AgentFeatureFlag",
+      resourceId: flag.id,
+      before,
+      after: flag,
+      metadata: {
         agentId: input.agentId,
         capability: input.capability,
         state: input.state
-      })
+      }
     });
 
     return flag;
@@ -99,14 +114,16 @@ export class GovernanceService {
       });
     }
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: approval.organizationId,
-      actorType: "USER",
+      source: "HUMAN",
       actorUserId: input.reviewedByUserId,
       action: "approval_request.reviewed",
-      targetType: "ApprovalRequest",
-      targetId: approval.id,
-      metadata: toInputJson({ status: input.status, note: input.note })
+      resourceType: "ApprovalRequest",
+      resourceId: approval.id,
+      before: existing,
+      after: approval,
+      metadata: { status: input.status, note: input.note }
     });
 
     return approval;

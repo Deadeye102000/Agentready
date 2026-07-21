@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
@@ -16,7 +17,7 @@ import {
 export async function registerTaskContractRoutes(app: FastifyInstance) {
   const service = new TaskContractService(
     new TaskContractRepository(app.prisma),
-    new AuditRepository(app.prisma),
+    new AuditService(new AuditRepository(app.prisma)),
     new TenancyService(new TenancyRepository(app.prisma))
   );
 
@@ -29,7 +30,11 @@ export async function registerTaskContractRoutes(app: FastifyInstance) {
   app.post("/task-contracts", async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createTaskContractBodySchema, request.body);
-    const contract = await service.create({ ...body, organizationId: context.organizationId });
+    const contract = await service.create({
+      ...body,
+      organizationId: context.organizationId,
+      actorUserId: context.userId
+    });
     return reply.code(201).send(contract);
   });
 

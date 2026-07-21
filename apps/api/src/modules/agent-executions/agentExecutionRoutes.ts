@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
@@ -21,7 +22,7 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   const service = new AgentExecutionService(
     new AgentExecutionRepository(app.prisma),
     new GovernanceRepository(app.prisma),
-    new AuditRepository(app.prisma),
+    new AuditService(new AuditRepository(app.prisma)),
     new TenancyService(new TenancyRepository(app.prisma))
   );
 

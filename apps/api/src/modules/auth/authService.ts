@@ -1,5 +1,6 @@
 import { hashPassword, signSession, verifyPassword } from "@agentready/auth";
 import { HttpError } from "../../lib/httpError.js";
+import { AuditService } from "../audit/auditService.js";
 import { AuthRepository } from "./authRepository.js";
 
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
@@ -13,7 +14,8 @@ export class AuthService {
   constructor(
     private readonly auth: AuthRepository,
     private readonly sessionSecret: string,
-    private readonly secureCookies: boolean
+    private readonly secureCookies: boolean,
+    private readonly audit: AuditService
   ) {}
 
   async register(input: {
@@ -33,7 +35,22 @@ export class AuthService {
         organizationSlug: this.slugify(input.organizationName)
       });
 
-      return this.createSessionResponse(user);
+      const session = this.createSessionResponse(user);
+      await this.audit.record({
+        organizationId: session.body.organization.id,
+        source: "HUMAN",
+        actorUserId: session.body.user.id,
+        action: "auth.registered",
+        resourceType: "User",
+        resourceId: session.body.user.id,
+        after: {
+          user: session.body.user,
+          organization: session.body.organization,
+          role: session.body.role
+        }
+      });
+
+      return session;
     } catch (error) {
       if (this.auth.isUniqueConstraintError(error)) {
         throw new HttpError({
@@ -57,7 +74,21 @@ export class AuthService {
       });
     }
 
-    return this.createSessionResponse(user);
+    const session = this.createSessionResponse(user);
+    await this.audit.record({
+      organizationId: session.body.organization.id,
+      source: "HUMAN",
+      actorUserId: session.body.user.id,
+      action: "auth.logged_in",
+      resourceType: "User",
+      resourceId: session.body.user.id,
+      after: {
+        organizationId: session.body.organization.id,
+        role: session.body.role
+      }
+    });
+
+    return session;
   }
 
   async currentUser(context: AuthContext) {
@@ -84,6 +115,21 @@ export class AuthService {
 
   createLogoutCookie() {
     return this.serializeCookie("", 0);
+  }
+
+  async logout(context: AuthContext | null) {
+    if (context) {
+      await this.audit.record({
+        organizationId: context.organizationId,
+        source: "HUMAN",
+        actorUserId: context.userId,
+        action: "auth.logged_out",
+        resourceType: "User",
+        resourceId: context.userId
+      });
+    }
+
+    return this.createLogoutCookie();
   }
 
   private createSessionResponse(user: {

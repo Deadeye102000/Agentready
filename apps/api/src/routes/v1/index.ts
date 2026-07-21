@@ -6,6 +6,7 @@ import { registerEvalRunRoutes } from "../../modules/eval-runs/evalRunRoutes.js"
 import { registerGovernanceRoutes } from "../../modules/governance/governanceRoutes.js";
 import { registerObservabilityRoutes } from "../../modules/observability/observabilityRoutes.js";
 import { registerTaskContractRoutes } from "../../modules/task-contracts/taskContractRoutes.js";
+import { registerAuditRoutes } from "../../modules/audit/auditRoutes.js";
 import { env } from "../../lib/env.js";
 import {
   enforceTenantScope,
@@ -41,4 +42,5 @@ export async function registerV1Routes(app: FastifyInstance) {
   await registerEvalRunRoutes(app);
   await registerGovernanceRoutes(app);
   await registerObservabilityRoutes(app);
+  await registerAuditRoutes(app);
 }

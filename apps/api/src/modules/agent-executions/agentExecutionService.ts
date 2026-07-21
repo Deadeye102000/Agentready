@@ -5,7 +5,7 @@ import type {
 } from "@agentready/shared";
 import { HttpError } from "../../lib/httpError.js";
 import { toInputJson } from "../../lib/json.js";
-import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { AgentExecutionRepository } from "./agentExecutionRepository.js";
@@ -18,7 +18,7 @@ export class AgentExecutionService {
   constructor(
     private readonly executions: AgentExecutionRepository,
     private readonly governance: GovernanceRepository,
-    private readonly audit: AuditRepository,
+    private readonly audit: AuditService,
     private readonly tenancy: TenancyService
   ) {}
 
@@ -56,18 +56,24 @@ export class AgentExecutionService {
       riskScore: input.riskScore
     });
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "AGENT",
+      source: "AGENT",
       actorAgentId: input.agentId,
       action: "agent_execution.created",
-      targetType: "AgentExecution",
-      targetId: execution.id,
-      metadata: toInputJson({
+      resourceType: "AgentExecution",
+      resourceId: execution.id,
+      after: {
+        status: execution.status,
+        objective: execution.objective,
+        riskScore: execution.riskScore,
+        projectId: execution.projectId,
         contractId: input.contractId,
-        taskId: input.taskId,
+        taskId: input.taskId
+      },
+      metadata: {
         workerReady: true
-      })
+      }
     });
 
     return execution;
@@ -115,14 +121,23 @@ export class AgentExecutionService {
       });
     }
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: execution.organizationId,
-      actorType: "AGENT",
+      source: "AGENT",
       actorAgentId: execution.agentId,
       action: "agent_execution.status_changed",
-      targetType: "AgentExecution",
-      targetId: execution.id,
-      metadata: toInputJson({ from: existing.status, to: execution.status })
+      resourceType: "AgentExecution",
+      resourceId: execution.id,
+      before: {
+        status: existing.status,
+        output: existing.output,
+        completedAt: existing.completedAt
+      },
+      after: {
+        status: execution.status,
+        output: execution.output,
+        completedAt: execution.completedAt
+      }
     });
 
     return execution;
@@ -207,18 +222,24 @@ export class AgentExecutionService {
       completedAt: completed ? new Date() : undefined
     });
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "AGENT",
+      source: "AGENT",
       actorAgentId: input.agentId,
       action: "tool_call_trace.recorded",
-      targetType: "ToolCallTrace",
-      targetId: trace.id,
-      metadata: toInputJson({
+      resourceType: "ToolCallTrace",
+      resourceId: trace.id,
+      after: {
+        status: trace.status,
+        toolName: trace.toolName,
+        latencyMs: trace.latencyMs,
+        approvalRequestId: trace.approvalRequestId,
+        error: trace.error
+      },
+      metadata: {
         executionId: input.executionId,
-        toolName: input.toolName,
-        status
-      })
+        toolName: input.toolName
+      }
     });
 
     return trace;
@@ -271,6 +292,29 @@ export class AgentExecutionService {
         statusCode: 404
       });
     }
+
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: "AGENT",
+      actorAgentId: existing.agentId,
+      action: "tool_call_trace.updated",
+      resourceType: "ToolCallTrace",
+      resourceId: trace.id,
+      before: {
+        status: existing.status,
+        output: existing.output,
+        error: existing.error,
+        latencyMs: existing.latencyMs,
+        completedAt: existing.completedAt
+      },
+      after: {
+        status: trace.status,
+        output: trace.output,
+        error: trace.error,
+        latencyMs: trace.latencyMs,
+        completedAt: trace.completedAt
+      }
+    });
 
     return trace;
   }

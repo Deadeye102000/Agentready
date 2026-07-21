@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
@@ -11,7 +12,7 @@ import { createEvalRunBodySchema, evalRunListQuerySchema } from "./evalRunSchema
 export async function registerEvalRunRoutes(app: FastifyInstance) {
   const service = new EvalRunService(
     new EvalRunRepository(app.prisma),
-    new AuditRepository(app.prisma),
+    new AuditService(new AuditRepository(app.prisma)),
     new TenancyService(new TenancyRepository(app.prisma))
   );
 

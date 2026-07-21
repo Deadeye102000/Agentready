@@ -1,13 +1,13 @@
 import type { TaskContractInput } from "@agentready/agent-contracts";
 import { toInputJson } from "../../lib/json.js";
-import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { TaskContractRepository } from "./taskContractRepository.js";
 
 export class TaskContractService {
   constructor(
     private readonly contracts: TaskContractRepository,
-    private readonly audit: AuditRepository,
+    private readonly audit: AuditService,
     private readonly tenancy: TenancyService
   ) {}
 
@@ -15,7 +15,7 @@ export class TaskContractService {
     return this.contracts.list(input);
   }
 
-  async create(input: TaskContractInput) {
+  async create(input: TaskContractInput & { actorUserId?: string }) {
     await this.tenancy.requireProject({
       organizationId: input.organizationId,
       projectId: input.projectId
@@ -44,13 +44,22 @@ export class TaskContractService {
       evalSpec: toInputJson(input.evalSpec)
     });
 
-    await this.audit.create({
+    await this.audit.record({
       organizationId: input.organizationId,
-      actorType: "SYSTEM",
+      source: "HUMAN",
+      actorUserId: input.actorUserId,
       action: "task_contract.created",
-      targetType: "TaskContract",
-      targetId: contract.id,
-      metadata: toInputJson({ name: contract.name, version: contract.version })
+      resourceType: "TaskContract",
+      resourceId: contract.id,
+      after: {
+        name: contract.name,
+        version: contract.version,
+        projectId: contract.projectId,
+        taskId: contract.taskId,
+        agentId: contract.agentId,
+        allowedTools: contract.allowedTools,
+        requiredApprovals: contract.requiredApprovals
+      }
     });
 
     return contract;

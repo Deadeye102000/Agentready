@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
@@ -18,7 +19,7 @@ import {
 export async function registerGovernanceRoutes(app: FastifyInstance) {
   const service = new GovernanceService(
     new GovernanceRepository(app.prisma),
-    new AuditRepository(app.prisma),
+    new AuditService(new AuditRepository(app.prisma)),
     new TenancyService(new TenancyRepository(app.prisma))
   );
 
@@ -31,7 +32,11 @@ export async function registerGovernanceRoutes(app: FastifyInstance) {
   app.put("/approval-gates", async (request) => {
     const context = requireOrgContext(request);
     const body = validateBody(approvalGateBodySchema, request.body);
-    return service.upsertApprovalGate({ ...body, organizationId: context.organizationId });
+    return service.upsertApprovalGate({
+      ...body,
+      organizationId: context.organizationId,
+      actorUserId: context.userId
+    });
   });
 
   app.get("/feature-flags", async (request) => {
@@ -43,7 +48,11 @@ export async function registerGovernanceRoutes(app: FastifyInstance) {
   app.put("/feature-flags", async (request) => {
     const context = requireOrgContext(request);
     const body = validateBody(featureFlagBodySchema, request.body);
-    return service.upsertFeatureFlag({ ...body, organizationId: context.organizationId });
+    return service.upsertFeatureFlag({
+      ...body,
+      organizationId: context.organizationId,
+      actorUserId: context.userId
+    });
   });
 
   app.get("/approval-requests", async (request) => {
