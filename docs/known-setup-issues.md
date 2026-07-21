@@ -32,6 +32,13 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Impact: Developers need `.env` copied from `.env.example` or an inline `DATABASE_URL`.
 - Revisit when: Adding onboarding scripts or a setup doctor command.
 
+## Prisma client must be regenerated after schema edits
+
+- Trigger observed: Added auth support with `User.passwordHash`.
+- Required command: `DATABASE_URL='postgresql://agentready:agentready@localhost:5432/agentready?schema=public' pnpm --filter @agentready/db db:generate`
+- Impact: TypeScript may not see new model fields until the generated client under `packages/db/src/generated/prisma` is updated.
+- Revisit when: Adding a prebuild check or making schema changes through migrations only.
+
 ## Legacy Prisma client generator caused auto-install failure
 
 - Previous generator: `provider = "prisma-client-js"`
@@ -39,3 +46,65 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Fix applied: Switched to `provider = "prisma-client"` with output at `packages/db/src/generated/prisma`.
 - Current status: `pnpm db:validate` and `pnpm db:generate` pass when `DATABASE_URL` is provided.
 - Revisit when: Upgrading Prisma or changing generated client output.
+
+## Database migration still needs a reachable database
+
+- Current status: `prisma validate` and `prisma generate` pass with inline `DATABASE_URL`.
+- Remaining gap: `pnpm db:migrate` and `pnpm db:seed` require PostgreSQL to be reachable.
+- Impact: Auth and tenancy schema changes, including `User.passwordHash`, will not exist in a real local database until migration runs.
+- Recommended order once PostgreSQL is available:
+  1. `cp .env.example .env`
+  2. Start PostgreSQL manually or through Docker.
+  3. `pnpm db:migrate`
+  4. `pnpm db:seed`
+- Revisit when: Docker/PostgreSQL is installed or a hosted dev database is configured.
+
+## Auth requires a stable session secret
+
+- Required env var: `AUTH_SESSION_SECRET`
+- Minimum length enforced by API env validation: 32 characters.
+- Development default exists, but should not be used in production.
+- Impact: Changing this secret invalidates all signed HTTP-only session cookies.
+- Revisit when: Adding deployment docs or secret management.
+
+## Protected API routes now require auth cookies
+
+- Current behavior: B2B routes under `/api/v1` are protected after auth routes are registered.
+- Public routes:
+  - `POST /api/v1/auth/register`
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/logout`
+  - `GET /api/v1/auth/me`
+  - `POST /api/v1/_test/validation`
+- Impact: Direct calls to dashboard, executions, contracts, evals, governance, and observability endpoints return `401` unless the request includes a valid `agentready_session` cookie.
+- Revisit when: Adding frontend login UI and API client helpers.
+
+## Organization ID is now server-derived
+
+- Current behavior: Protected route schemas omit `organizationId`; routes derive it from `request.authContext`.
+- Impact: Older manual API calls that include `organizationId` in query/body may fail validation or be ignored depending on the route.
+- Correct pattern: Log in first, keep the HTTP-only cookie, then call protected APIs without sending `organizationId`.
+- Revisit when: Updating API docs, curl examples, and frontend data fetching.
+
+## Frontend dashboard still has demo fallback behavior
+
+- Current behavior: `apps/web/src/app/page.tsx` fetches `/api/v1/observability/dashboard` and falls back to hardcoded demo-shaped data if the API call fails.
+- Impact: If unauthenticated, the protected API returns `401`, and the page can still show fallback demo data. This is helpful during local UI work but can hide auth/API setup problems.
+- Revisit when: Adding login UI, authenticated dashboard loading states, and explicit unauthenticated screens.
+
+## API port expectations need to stay aligned
+
+- `.env.example` sets `API_PORT=3001`.
+- The frontend uses `AGENTREADY_API_URL` or defaults to `http://localhost:4000`.
+- Impact: Without setting `AGENTREADY_API_URL=http://localhost:3001`, the dashboard may call the wrong API port and show fallback data.
+- Recommended local web env: `AGENTREADY_API_URL=http://localhost:3001`.
+- Revisit when: Adding web `.env.example`, shared config, or Next.js rewrites.
+
+## Initial git baseline is still important
+
+- Observed state: Earlier work happened while the repo was fully untracked.
+- Impact: `git diff` is not useful until there is an initial commit. Reviews and incremental audits become harder.
+- Recommended action:
+  - Commit the current foundation once the user is ready.
+  - After that, use `git diff`, `git show`, and small scoped commits for each feature.
+- Revisit when: Preparing the first clean commit or PR.
