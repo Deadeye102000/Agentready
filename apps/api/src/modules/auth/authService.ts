@@ -54,7 +54,7 @@ export class AuthService {
     } catch (error) {
       if (this.auth.isUniqueConstraintError(error)) {
         throw new HttpError({
-          code: "VALIDATION_ERROR",
+          code: "CONFLICT",
           message: "A user or organization with these details already exists",
           statusCode: 409
         });
