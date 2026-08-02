@@ -33,6 +33,7 @@ export class AgentExecutionRepository {
       },
       include: {
         agent: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         contract: true,
         task: true,
         toolCallTraces: { orderBy: { startedAt: "asc" } },

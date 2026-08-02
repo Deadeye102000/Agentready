@@ -208,6 +208,7 @@ mockPrisma.agentExecution.findFirst = async (args: any) => {
   if (!execution) return null;
 
   const agent = mockStore.agentIdentities.find((a) => a.id === execution.agentId);
+  const project = mockStore.projects.find((p) => p.id === execution.projectId);
   const contract = mockStore.taskContracts.find((c) => c.id === execution.contractId);
   const task = mockStore.tasks.find((t) => t.id === execution.taskId);
   const toolCallTraces = mockStore.toolCallTraces.filter((t) => t.executionId === execution.id);
@@ -216,6 +217,7 @@ mockPrisma.agentExecution.findFirst = async (args: any) => {
   return {
     ...execution,
     agent: agent ? { id: agent.id, name: agent.name } : null,
+    project: project ? { id: project.id, name: project.name } : null,
     contract: contract || null,
     task: task || null,
     toolCallTraces,

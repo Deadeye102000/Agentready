@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Navbar } from "../components/Navbar";
 import {
   fetchDashboardData,
@@ -281,21 +282,27 @@ export default async function HomePage() {
             {dashboard.recentExecutions.length > 0 ? (
               <div className="executionList">
                 {dashboard.recentExecutions.map((execution) => (
-                  <article className="execution" key={execution.id}>
-                    <div>
-                      <div className="rowTitle">{execution.objective}</div>
-                      <div className="muted">
-                        {execution.agent.name} · {execution.contract?.name ?? "No contract"} v
-                        {execution.contract?.version ?? 0}
+                  <Link
+                    href={`/executions/${execution.id}`}
+                    key={execution.id}
+                    style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                  >
+                    <article className="execution">
+                      <div>
+                        <div className="rowTitle">{execution.objective}</div>
+                        <div className="muted">
+                          {execution.agent.name} · {execution.contract?.name ?? "No contract"} v
+                          {execution.contract?.version ?? 0}
+                        </div>
                       </div>
-                    </div>
-                    <div className="executionStats">
-                      <span className={`pill ${statusClass(execution.status)}`}>{execution.status}</span>
-                      <span>{execution._count.toolCallTraces} traces</span>
-                      <span>{execution._count.evalRuns} evals</span>
-                      <span>Risk {execution.riskScore}</span>
-                    </div>
-                  </article>
+                      <div className="executionStats">
+                        <span className={`pill ${statusClass(execution.status)}`}>{execution.status}</span>
+                        <span>{execution._count.toolCallTraces} traces</span>
+                        <span>{execution._count.evalRuns} evals</span>
+                        <span>Risk {execution.riskScore}</span>
+                      </div>
+                    </article>
+                  </Link>
                 ))}
               </div>
             ) : (

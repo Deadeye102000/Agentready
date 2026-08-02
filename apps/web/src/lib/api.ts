@@ -313,3 +313,109 @@ export function statusClass(status: string) {
 
   return "warn";
 }
+
+export type ExecutionDetailData = {
+  id: string;
+  status: string;
+  objective: string;
+  riskScore: number;
+  input: any;
+  output: any;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  agent: { id: string; name: string };
+  project: { id: string; name: string } | null;
+  contract: { id: string; name: string; version: number } | null;
+  task: { id: string; name: string } | null;
+  toolCallTraces: Array<{
+    id: string;
+    toolName: string;
+    status: string;
+    input: any;
+    output: any;
+    error: string | null;
+    latencyMs: number | null;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+  evalRuns: Array<{
+    id: string;
+    name: string;
+    status: string;
+    score: number | null;
+    threshold: number;
+  }>;
+};
+
+export const fallbackExecutionDetail: ExecutionDetailData = {
+  id: "demo-execution-detail",
+  status: "WAITING_FOR_APPROVAL",
+  objective: "Draft onboarding workflow & publish customer docs.",
+  riskScore: 78,
+  input: { format: "markdown", target: "wiki" },
+  output: null,
+  startedAt: new Date(Date.now() - 3600000).toISOString(),
+  completedAt: null,
+  failureReason: null,
+  createdAt: new Date(Date.now() - 3600000).toISOString(),
+  updatedAt: new Date().toISOString(),
+  agent: { id: "agent-1", name: "DocGen Agent" },
+  project: { id: "proj-1", name: "Acme Documentation Portal" },
+  contract: { id: "contract-1", name: "Customer Onboarding Contract", version: 2 },
+  task: null,
+  toolCallTraces: [
+    {
+      id: "trace-1",
+      toolName: "knowledge.search",
+      status: "SUCCEEDED",
+      input: { query: "onboarding process" },
+      output: { results: ["onboarding guide template v2", "security access checklist"] },
+      error: null,
+      latencyMs: 142,
+      createdAt: new Date(Date.now() - 3500000).toISOString(),
+      completedAt: new Date(Date.now() - 3500000).toISOString()
+    },
+    {
+      id: "trace-2",
+      toolName: "external.publish",
+      status: "BLOCKED",
+      input: { path: "/docs/onboarding", content: "..." },
+      output: null,
+      error: "Approval required by external_publish gate policy.",
+      latencyMs: 18,
+      createdAt: new Date(Date.now() - 3400000).toISOString(),
+      completedAt: new Date(Date.now() - 3400000).toISOString()
+    }
+  ],
+  evalRuns: []
+};
+
+export async function fetchExecutionDetail(id: string): Promise<ApiResult<ExecutionDetailData>> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/v1/executions/${id}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return {
+        data: fallbackExecutionDetail,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: true,
+      };
+    }
+
+    const data = (await res.json()) as ExecutionDetailData;
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: fallbackExecutionDetail,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: true,
+    };
+  }
+}
