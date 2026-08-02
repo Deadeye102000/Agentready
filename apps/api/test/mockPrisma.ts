@@ -58,8 +58,10 @@ function genId() {
 }
 
 // Override prisma client methods
+const mockPrisma = prisma as any;
+
 // Users
-prisma.user.findUnique = async (args: any) => {
+mockPrisma.user.findUnique = async (args: any) => {
   const where = args.where;
   if (where.email) {
     const user = mockStore.users.find((u) => u.email === where.email);
@@ -76,7 +78,7 @@ prisma.user.findUnique = async (args: any) => {
   return null;
 };
 
-prisma.user.findFirst = async (args: any) => {
+mockPrisma.user.findFirst = async (args: any) => {
   const where = args.where;
   const userId = where.id;
   const orgId = where.memberships?.some?.organizationId;
@@ -93,7 +95,7 @@ prisma.user.findFirst = async (args: any) => {
   return { ...user, memberships: userMemberships };
 };
 
-prisma.user.create = async (args: any) => {
+mockPrisma.user.create = async (args: any) => {
   const data = args.data;
   const userId = genId();
   const orgId = genId();
@@ -136,35 +138,35 @@ prisma.user.create = async (args: any) => {
 };
 
 // Count queries for tenancy checks
-prisma.project.count = async (args: any) => {
+mockPrisma.project.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.projects.filter(
     (p) => (!where.id || p.id === where.id) && (!where.organizationId || p.organizationId === where.organizationId)
   ).length;
 };
 
-prisma.task.count = async (args: any) => {
+mockPrisma.task.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.tasks.filter(
     (t) => (!where.id || t.id === where.id) && (!where.organizationId || t.organizationId === where.organizationId)
   ).length;
 };
 
-prisma.agentIdentity.count = async (args: any) => {
+mockPrisma.agentIdentity.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentIdentities.filter(
     (a) => (!where.id || a.id === where.id) && (!where.organizationId || a.organizationId === where.organizationId)
   ).length;
 };
 
-prisma.taskContract.count = async (args: any) => {
+mockPrisma.taskContract.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.taskContracts.filter(
     (c) => (!where.id || c.id === where.id) && (!where.organizationId || c.organizationId === where.organizationId)
   ).length;
 };
 
-prisma.agentExecution.count = async (args: any) => {
+mockPrisma.agentExecution.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentExecutions.filter(
     (e) => (!where.id || e.id === where.id) && (!where.organizationId || e.organizationId === where.organizationId)
@@ -172,7 +174,7 @@ prisma.agentExecution.count = async (args: any) => {
 };
 
 // Executions
-prisma.agentExecution.create = async (args: any) => {
+mockPrisma.agentExecution.create = async (args: any) => {
   const data = args.data;
   const execution = {
     id: genId(),
@@ -195,7 +197,7 @@ prisma.agentExecution.create = async (args: any) => {
   return execution;
 };
 
-prisma.agentExecution.findFirst = async (args: any) => {
+mockPrisma.agentExecution.findFirst = async (args: any) => {
   const where = args.where || {};
   const execution = mockStore.agentExecutions.find(
     (e) => (!where.id || e.id === where.id) && (!where.organizationId || e.organizationId === where.organizationId)
@@ -218,7 +220,7 @@ prisma.agentExecution.findFirst = async (args: any) => {
   };
 };
 
-prisma.agentExecution.updateMany = async (args: any) => {
+mockPrisma.agentExecution.updateMany = async (args: any) => {
   const { where, data } = args;
   const matches = mockStore.agentExecutions.filter(
     (e) => (!where.id || e.id === where.id) && (!where.organizationId || e.organizationId === where.organizationId)
@@ -233,7 +235,7 @@ prisma.agentExecution.updateMany = async (args: any) => {
   return { count: matches.length };
 };
 
-prisma.agentExecution.findMany = async (args: any) => {
+mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
     (e) =>
@@ -256,7 +258,7 @@ prisma.agentExecution.findMany = async (args: any) => {
 };
 
 // Tool Calls (for executions service calls)
-prisma.toolCallTrace.create = async (args: any) => {
+mockPrisma.toolCallTrace.create = async (args: any) => {
   const data = args.data;
   const trace = {
     id: genId(),
@@ -278,7 +280,7 @@ prisma.toolCallTrace.create = async (args: any) => {
 };
 
 // Audit log
-prisma.auditLog.create = async (args: any) => {
+mockPrisma.auditLog.create = async (args: any) => {
   const data = args.data;
   const log = {
     id: genId(),
@@ -297,7 +299,7 @@ prisma.auditLog.create = async (args: any) => {
 };
 
 // Feature Flags
-prisma.agentFeatureFlag.findUnique = async (args: any) => {
+mockPrisma.agentFeatureFlag.findUnique = async (args: any) => {
   const where = args.where?.organizationId_agentId_capability;
   if (!where) return null;
   return mockStore.featureFlags.find(
@@ -305,7 +307,7 @@ prisma.agentFeatureFlag.findUnique = async (args: any) => {
   ) || null;
 };
 
-prisma.agentFeatureFlag.findFirst = async (args: any) => {
+mockPrisma.agentFeatureFlag.findFirst = async (args: any) => {
   const where = args.where || {};
   return mockStore.featureFlags.find(
     (f) =>
@@ -315,7 +317,7 @@ prisma.agentFeatureFlag.findFirst = async (args: any) => {
   ) || null;
 };
 
-prisma.agentFeatureFlag.upsert = async (args: any) => {
+mockPrisma.agentFeatureFlag.upsert = async (args: any) => {
   const { create, update } = args;
   let flag = mockStore.featureFlags.find(
     (f) => f.organizationId === create.organizationId && f.agentId === create.agentId && f.capability === create.capability
@@ -340,7 +342,7 @@ prisma.agentFeatureFlag.upsert = async (args: any) => {
   return flag;
 };
 
-prisma.agentFeatureFlag.create = async (args: any) => {
+mockPrisma.agentFeatureFlag.create = async (args: any) => {
   const data = args.data;
   const flag = {
     id: genId(),
@@ -356,7 +358,7 @@ prisma.agentFeatureFlag.create = async (args: any) => {
   return flag;
 };
 
-prisma.agentFeatureFlag.update = async (args: any) => {
+mockPrisma.agentFeatureFlag.update = async (args: any) => {
   const { where, data } = args;
   const flag = mockStore.featureFlags.find((f) => f.id === where.id);
   if (!flag) throw new Error("Not found");
@@ -366,7 +368,7 @@ prisma.agentFeatureFlag.update = async (args: any) => {
   return flag;
 };
 
-prisma.agentFeatureFlag.findMany = async (args: any) => {
+mockPrisma.agentFeatureFlag.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.featureFlags.filter((f) => f.organizationId === where.organizationId);
   return matches.map(f => {
@@ -376,12 +378,12 @@ prisma.agentFeatureFlag.findMany = async (args: any) => {
 };
 
 // Approval Gates
-prisma.approvalGate.findMany = async (args: any) => {
+mockPrisma.approvalGate.findMany = async (args: any) => {
   const where = args.where || {};
   return mockStore.approvalGates.filter((g) => g.organizationId === where.organizationId);
 };
 
-prisma.approvalGate.findUnique = async (args: any) => {
+mockPrisma.approvalGate.findUnique = async (args: any) => {
   const where = args.where?.organizationId_capability;
   if (!where) return null;
   return mockStore.approvalGates.find(
@@ -389,7 +391,7 @@ prisma.approvalGate.findUnique = async (args: any) => {
   ) || null;
 };
 
-prisma.approvalGate.upsert = async (args: any) => {
+mockPrisma.approvalGate.upsert = async (args: any) => {
   const { create, update } = args;
   let gate = mockStore.approvalGates.find(
     (g) => g.organizationId === create.organizationId && g.capability === create.capability
@@ -418,7 +420,7 @@ prisma.approvalGate.upsert = async (args: any) => {
 };
 
 // Approval Requests
-prisma.approvalRequest.create = async (args: any) => {
+mockPrisma.approvalRequest.create = async (args: any) => {
   const data = args.data;
   const request = {
     id: genId(),
@@ -438,7 +440,7 @@ prisma.approvalRequest.create = async (args: any) => {
   return request;
 };
 
-prisma.approvalRequest.findMany = async (args: any) => {
+mockPrisma.approvalRequest.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.approvalRequests.filter(
     (r) => r.organizationId === where.organizationId && (!where.status || r.status === where.status)
@@ -454,14 +456,14 @@ prisma.approvalRequest.findMany = async (args: any) => {
   });
 };
 
-prisma.approvalRequest.findFirst = async (args: any) => {
+mockPrisma.approvalRequest.findFirst = async (args: any) => {
   const where = args.where || {};
   return mockStore.approvalRequests.find(
     (r) => (!where.id || r.id === where.id) && (!where.organizationId || r.organizationId === where.organizationId)
   ) || null;
 };
 
-prisma.approvalRequest.updateMany = async (args: any) => {
+mockPrisma.approvalRequest.updateMany = async (args: any) => {
   const { where, data } = args;
   const matches = mockStore.approvalRequests.filter(
     (r) => (!where.id || r.id === where.id) && (!where.organizationId || r.organizationId === where.organizationId)

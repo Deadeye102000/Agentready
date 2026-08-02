@@ -216,19 +216,37 @@ The service checks feature flags and approval gates. If a capability is disabled
 
 ### What are approval gates?
 
-Approval gates define policy for risky capabilities. A capability can be automatic, require approval, or be blocked.
+Approval gates define policy for risky capabilities. A capability can be automatic, require approval, or be blocked. They support enabling/disabling, matching capability patterns/wildcards (e.g. `file_*`), and a `riskLevel` integer setting to threshold risk scores.
+
+### What happens when an approval gate is triggered?
+
+When a tool trace is recorded and its capability matches a gate requiring manual review:
+1. A new `ApprovalRequest` is created in `PENDING` state.
+2. The trace status is set to `BLOCKED` with the error `approval_requested`.
+3. The parent agent execution pauses, transitioning to `WAITING_FOR_APPROVAL`.
+4. A trace event records the request.
+The execution remains paused until an administrator approves or rejects the request via `POST /api/v1/approval-requests/:id/review`.
 
 ### What are feature flags?
 
-Feature flags control which agent can use which capability. This prevents agents from accessing tools that are not explicitly enabled.
+Feature flags control system capabilities on an organization-wide and agent-specific level. They are evaluated hierarchically (agent-specific override takes precedence, falling back to organization-wide defaults).
 
-### Why have both gates and flags?
+### What capabilities do feature flags control?
 
-Feature flags answer “can this agent use this capability at all?” Approval gates answer “does this capability require human review or policy blocking?”
+Feature flags control five key system functions:
+1. `agent_execution`: Disables creation of executions globally or per agent.
+2. `tool_execution`: Completely blocks executing custom integration tools.
+3. `eval_runner`: Prevents running assertions or creating evaluation reports.
+4. `mcp_server_access`: Restricts viewing or communicating with registered Model Context Protocol servers.
+5. `auto_approval`: Overrides all `AUTOMATIC` approval gates to require manual human approval if disabled.
 
 ### Where are these checked?
 
-They are checked in `AgentExecutionService.recordToolCall` before storing the final tool-call trace status.
+They are checked at runtime:
+- `agent_execution`: Checked at execution creation.
+- `tool_execution` and `auto_approval`: Checked during tool trace recordings.
+- `eval_runner`: Checked at evaluation runs creation.
+- `mcp_server_access`: Checked when listing MCP servers.
 
 ## 9. Audit Logging Questions
 
@@ -342,25 +360,26 @@ The frontend currently defines dashboard types locally instead of consuming shar
 ### What checks currently pass?
 
 The repo has been verified with:
-
-- `pnpm typecheck`
-- `pnpm build`
+- `pnpm typecheck` (workspace-wide TS compilation checks)
+- `pnpm build` (Next.js & API production bundles compile successfully)
 - Prisma schema validation
+- Complete integration test suite checking:
+  - Auth: registration, login, session signing, logout, me, route protection.
+  - Multi-tenancy: isolation between Org A and Org B resources, foreign ID injection attempts return `403 Forbidden` or `404 Not Found`.
+  - Execution State Machine: valid lifecycle state flow assertions, blocking finalized state overrides, transitioning to failed status on block.
+  - Governance: Wildcard approval gates, risk thresholds, pauses for WAITING_FOR_APPROVAL status, manual approvals queue.
+  - Feature Flags: blocked runs, tool traces, evals, and MCP access, auto-approval overrides, toggle audit logs.
+
+### What is the automated test architecture?
+
+Integration tests run on Fastify using `supertest`/`app.inject` without requiring a live Postgres instance, utilizing a fully in-memory DB mock client in `apps/api/test/mockPrisma.ts`. All 25 test cases execute and pass successfully.
 
 ### What tests are still needed?
 
-Priority tests:
-
-- auth register/login/current-user
-- protected route rejects unauthenticated requests
-- cross-org access returns 403/404
-- relation ownership checks reject foreign IDs
-- execution state machine rejects invalid transitions
-- tool calls always create traces
-- approval gates and feature flags block/approve correctly
-- observability aggregates only current org data
-- audit logs are written for sensitive actions
-- standardized error responses for validation, auth, Prisma, rate limit, and body-limit failures
+Future tests should cover:
+- End-to-end frontend visual flow testing
+- High concurrency and race condition tests for execution worker queues
+- Load testing and rate limit validation under stress conditions
 
 ## 14. Tradeoff Questions
 
@@ -386,18 +405,17 @@ Treating agent activity as governed execution rather than generic CRUD. The core
 
 ### What would you improve next?
 
-1. Add route and service tests.
-2. Add role-based authorization.
-3. Add login/register frontend.
-4. Add idempotency middleware.
-5. Add migration files and seed hardening.
-6. Add worker abstraction for queued executions.
-7. Add typed API response contracts.
-8. Add frontend screens for audit logs and security settings.
+1. Add role-based authorization.
+2. Add login/register frontend.
+3. Add idempotency middleware.
+4. Add migration files and seed hardening.
+5. Add worker abstraction for queued executions.
+6. Add typed API response contracts.
+7. Add frontend screen for audit logs.
 
 ### What is not production-ready yet?
 
-The foundation is production-minded, but not complete. Missing areas include RBAC, password reset, SSO, test coverage, observability infrastructure, background workers, deployment hardening, and migration workflow.
+The foundation is production-minded, but not complete. Missing areas include RBAC, password reset, SSO, full observability infrastructure, background workers, deployment hardening, and migration workflow.
 
 ## 16. Strong Closing Pitch
 

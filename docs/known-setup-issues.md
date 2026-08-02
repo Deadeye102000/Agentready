@@ -171,3 +171,17 @@ These are unresolved environment/setup issues observed during the initial AgentR
   - Commit the current foundation once the user is ready.
   - After that, use `git diff`, `git show`, and small scoped commits for each feature.
 - Revisit when: Preparing the first clean commit or PR.
+
+## Mock DB Client direct assignments require casting proxy reference
+
+- Context: Prisma client's auto-generated types define query methods (like `findUnique`, `findFirst`, `create`) as read-only properties.
+- Result: Directly reassigning them like `prisma.user.findUnique = ...` inside the mock store module (`apps/api/test/mockPrisma.ts`) causes TypeScript diagnostics and IDE/terminal problems.
+- Fix: All assignments are routed through a cast proxy reference: `const mockPrisma = prisma as any;`.
+- Revisit when: Writing new model test mocks.
+
+## Compound Unique Constraints with Nullable Fields in Prisma
+
+- Context: A unique constraint on multiple fields, where one field is optional/nullable (e.g., `@@unique([organizationId, agentId, capability])` with `agentId` being optional).
+- Result: Prisma's generated compound query types enforce that compound fields cannot be `null`, making standard unique `upsert` calls on nullable fields fail typechecking.
+- Fix: Perform an existence check first using `findFirst` (which accepts `null` in its `where` clause) followed by a separate `create` or `update` call.
+- Revisit when: Designing database indexes for governance resources.
