@@ -1,14 +1,17 @@
 import type { CreateEvalRunInput } from "@agentready/shared";
 import { toInputJson } from "../../lib/json.js";
+import { HttpError } from "../../lib/httpError.js";
 import { AuditService } from "../audit/auditService.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
+import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { EvalRunRepository } from "./evalRunRepository.js";
 
 export class EvalRunService {
   constructor(
     private readonly evalRuns: EvalRunRepository,
     private readonly audit: AuditService,
-    private readonly tenancy: TenancyService
+    private readonly tenancy: TenancyService,
+    private readonly governance: GovernanceRepository
   ) {}
 
   list(input: { organizationId: string; projectId?: string; executionId?: string }) {
@@ -16,6 +19,19 @@ export class EvalRunService {
   }
 
   async create(input: CreateEvalRunInput) {
+    const isEvalEnabled = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: "eval_runner"
+    });
+    if (isEvalEnabled && isEvalEnabled.state === "DISABLED") {
+      throw new HttpError({
+        code: "FORBIDDEN",
+        message: "Evaluation runner is disabled by feature flag",
+        statusCode: 403
+      });
+    }
+
     await this.tenancy.requireProject({
       organizationId: input.organizationId,
       projectId: input.projectId

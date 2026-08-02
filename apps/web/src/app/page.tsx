@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type DashboardData = {
   organization: { id: string; name: string; slug: string } | null;
   metrics: {
@@ -198,6 +200,10 @@ export default async function HomePage() {
         <div>
           <p className="eyebrow">AgentReady</p>
           <h1>Agent observability dashboard</h1>
+          <nav className="nav" style={{ marginTop: "0.75rem", display: "flex", gap: "1rem" }}>
+            <Link href="/" style={{ color: "var(--fg)", fontWeight: "bold", textDecoration: "none" }}>Dashboard</Link>
+            <Link href="/feature-flags" style={{ color: "var(--muted)", textDecoration: "none" }}>Feature Flags</Link>
+          </nav>
         </div>
         <div className="orgBadge">{dashboard.organization?.name ?? "No organization"}</div>
       </header>

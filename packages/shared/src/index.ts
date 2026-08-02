@@ -76,7 +76,7 @@ export function matchPattern(pattern: string, action: string): boolean {
 
 export const upsertAgentFeatureFlagSchema = z.object({
   organizationId: z.string().min(1),
-  agentId: z.string().min(1),
+  agentId: z.string().nullable().optional(),
   capability: z.string().min(1),
   state: featureFlagStateSchema,
   description: z.string().optional()

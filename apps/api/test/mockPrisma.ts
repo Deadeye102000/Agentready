@@ -305,6 +305,16 @@ prisma.agentFeatureFlag.findUnique = async (args: any) => {
   ) || null;
 };
 
+prisma.agentFeatureFlag.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.featureFlags.find(
+    (f) =>
+      (!where.organizationId || f.organizationId === where.organizationId) &&
+      (!where.capability || f.capability === where.capability) &&
+      (where.agentId === undefined || f.agentId === where.agentId)
+  ) || null;
+};
+
 prisma.agentFeatureFlag.upsert = async (args: any) => {
   const { create, update } = args;
   let flag = mockStore.featureFlags.find(
@@ -327,6 +337,32 @@ prisma.agentFeatureFlag.upsert = async (args: any) => {
     };
     mockStore.featureFlags.push(flag);
   }
+  return flag;
+};
+
+prisma.agentFeatureFlag.create = async (args: any) => {
+  const data = args.data;
+  const flag = {
+    id: genId(),
+    organizationId: data.organizationId,
+    agentId: data.agentId || null,
+    capability: data.capability,
+    state: data.state || "DISABLED",
+    description: data.description || null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mockStore.featureFlags.push(flag);
+  return flag;
+};
+
+prisma.agentFeatureFlag.update = async (args: any) => {
+  const { where, data } = args;
+  const flag = mockStore.featureFlags.find((f) => f.id === where.id);
+  if (!flag) throw new Error("Not found");
+  if (data.state !== undefined) flag.state = data.state;
+  if (data.description !== undefined) flag.description = data.description;
+  flag.updatedAt = new Date();
   return flag;
 };
 

@@ -40,6 +40,19 @@ export class AgentExecutionService {
       organizationId: input.organizationId,
       contractId: input.contractId
     });
+    const isExecutionEnabled = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: "agent_execution"
+    });
+    if (isExecutionEnabled && isExecutionEnabled.state === "DISABLED") {
+      throw new HttpError({
+        code: "FORBIDDEN",
+        message: "Agent execution is disabled by feature flag",
+        statusCode: 403
+      });
+    }
+
     await this.tenancy.requireAgent({
       organizationId: input.organizationId,
       agentId: input.agentId
@@ -167,6 +180,20 @@ export class AgentExecutionService {
       agentId: input.agentId,
       capability: input.toolName
     });
+    const globalToolFlag = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: "tool_execution"
+    });
+    const autoApprovalFlag = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId,
+      capability: "auto_approval"
+    });
+
+    const isToolDisabled = (featureFlag && featureFlag.state === "DISABLED") || (globalToolFlag && globalToolFlag.state === "DISABLED");
+    const isAutoApprovalDisabled = autoApprovalFlag && autoApprovalFlag.state === "DISABLED";
+
     const gates = await this.governance.listApprovalGates({
       organizationId: input.organizationId
     });
@@ -183,13 +210,27 @@ export class AgentExecutionService {
 
     const gateTriggers = gate && execution.riskScore >= gate.riskLevel;
 
-    if (!featureFlag || featureFlag.state === "DISABLED") {
+    let effectiveMode = gate?.mode;
+    if (effectiveMode === "AUTOMATIC" && isAutoApprovalDisabled) {
+      effectiveMode = "REQUIRE_APPROVAL";
+    }
+
+    if (isToolDisabled) {
       status = "BLOCKED";
-      error = `Capability ${input.toolName} is disabled for this agent.`;
-    } else if (gateTriggers && gate.mode === "BLOCKED") {
+      error = `Capability ${input.toolName} is disabled for this agent by feature flag.`;
+
+      if (execution.status === "RUNNING") {
+        await this.transition({
+          organizationId: input.organizationId,
+          id: execution.id,
+          status: "FAILED",
+          output: { error: `Execution blocked: Capability ${input.toolName} is disabled by feature flag.` }
+        });
+      }
+    } else if (gateTriggers && effectiveMode === "BLOCKED") {
       status = "BLOCKED";
       error = gate.reason ?? `Capability ${input.toolName} is blocked by policy.`;
-    } else if (gateTriggers && gate.mode === "REQUIRE_APPROVAL" && status !== "BLOCKED") {
+    } else if (gateTriggers && effectiveMode === "REQUIRE_APPROVAL" && status !== "BLOCKED") {
       const approval = await this.governance.createApprovalRequest({
         organizationId: input.organizationId,
         agentId: input.agentId,

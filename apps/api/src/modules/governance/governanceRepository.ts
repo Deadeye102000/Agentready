@@ -45,37 +45,58 @@ export class GovernanceRepository {
     });
   }
 
-  upsertFeatureFlag(input: {
+  async upsertFeatureFlag(input: {
     organizationId: string;
-    agentId: string;
+    agentId: string | null;
     capability: string;
     state: "ENABLED" | "DISABLED";
     description?: string;
   }) {
-    return this.prisma.agentFeatureFlag.upsert({
+    const existing = await this.prisma.agentFeatureFlag.findFirst({
       where: {
-        organizationId_agentId_capability: {
+        organizationId: input.organizationId,
+        agentId: input.agentId,
+        capability: input.capability
+      }
+    });
+
+    if (existing) {
+      return this.prisma.agentFeatureFlag.update({
+        where: { id: existing.id },
+        data: {
+          state: input.state,
+          description: input.description
+        }
+      });
+    } else {
+      return this.prisma.agentFeatureFlag.create({
+        data: {
           organizationId: input.organizationId,
           agentId: input.agentId,
-          capability: input.capability
+          capability: input.capability,
+          state: input.state,
+          description: input.description
         }
-      },
-      update: {
-        state: input.state,
-        description: input.description
-      },
-      create: input
-    });
+      });
+    }
   }
 
-  findFeatureFlag(input: { organizationId: string; agentId: string; capability: string }) {
-    return this.prisma.agentFeatureFlag.findUnique({
-      where: {
-        organizationId_agentId_capability: {
+  async findFeatureFlag(input: { organizationId: string; agentId?: string | null; capability: string }) {
+    if (input.agentId) {
+      const specific = await this.prisma.agentFeatureFlag.findFirst({
+        where: {
           organizationId: input.organizationId,
           agentId: input.agentId,
           capability: input.capability
         }
+      });
+      if (specific) return specific;
+    }
+    return this.prisma.agentFeatureFlag.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        agentId: null,
+        capability: input.capability
       }
     });
   }

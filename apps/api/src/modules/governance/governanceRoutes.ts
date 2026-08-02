@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
@@ -80,5 +81,19 @@ export async function registerGovernanceRoutes(app: FastifyInstance) {
     const context = requireOrgContext(request);
     emptyQuerySchema.parse(request.query);
     return service.listMcpServers({ organizationId: context.organizationId });
+  });
+
+  app.post("/feature-flags/toggle", async (request) => {
+    const context = requireOrgContext(request);
+    const body = z.object({
+      agentId: z.string().nullable().optional(),
+      capability: z.string().min(1)
+    }).parse(request.body);
+
+    return service.toggleFeatureFlag({
+      ...body,
+      organizationId: context.organizationId,
+      actorUserId: context.userId
+    });
   });
 }

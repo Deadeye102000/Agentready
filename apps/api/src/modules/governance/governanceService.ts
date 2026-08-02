@@ -54,17 +54,22 @@ export class GovernanceService {
   }
 
   async upsertFeatureFlag(input: UpsertFeatureFlagInput & { actorUserId?: string }) {
-    await this.tenancy.requireAgent({
-      organizationId: input.organizationId,
-      agentId: input.agentId
-    });
+    if (input.agentId) {
+      await this.tenancy.requireAgent({
+        organizationId: input.organizationId,
+        agentId: input.agentId
+      });
+    }
 
     const before = await this.governance.findFeatureFlag({
       organizationId: input.organizationId,
       agentId: input.agentId,
       capability: input.capability
     });
-    const flag = await this.governance.upsertFeatureFlag(input);
+    const flag = await this.governance.upsertFeatureFlag({
+      ...input,
+      agentId: input.agentId ?? null
+    });
 
     await this.audit.record({
       organizationId: input.organizationId,
@@ -164,7 +169,56 @@ export class GovernanceService {
     return approval;
   }
 
-  listMcpServers(input: { organizationId: string }) {
+  async listMcpServers(input: { organizationId: string }) {
+    const isMcpEnabled = await this.governance.findFeatureFlag({
+      organizationId: input.organizationId,
+      capability: "mcp_server_access"
+    });
+    if (isMcpEnabled && isMcpEnabled.state === "DISABLED") {
+      throw new HttpError({
+        code: "FORBIDDEN",
+        message: "MCP server access is disabled by feature flag",
+        statusCode: 403
+      });
+    }
     return this.governance.listMcpServers(input);
+  }
+
+  async toggleFeatureFlag(input: {
+    organizationId: string;
+    agentId?: string | null;
+    capability: string;
+    actorUserId: string;
+  }) {
+    if (input.agentId) {
+      await this.tenancy.requireAgent({
+        organizationId: input.organizationId,
+        agentId: input.agentId
+      });
+    }
+
+    const existing = await this.governance.findFeatureFlag(input);
+    const newState = existing && existing.state === "ENABLED" ? "DISABLED" : "ENABLED";
+
+    const flag = await this.governance.upsertFeatureFlag({
+      organizationId: input.organizationId,
+      agentId: input.agentId ?? null,
+      capability: input.capability,
+      state: newState
+    });
+
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: "HUMAN",
+      actorUserId: input.actorUserId,
+      action: "feature_flag.toggled",
+      resourceType: "AgentFeatureFlag",
+      resourceId: flag.id,
+      before: existing,
+      after: flag,
+      metadata: { state: newState }
+    });
+
+    return flag;
   }
 }
