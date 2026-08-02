@@ -30,7 +30,8 @@ export class ObservabilityRepository {
       recentEvalRuns,
       approvalGates,
       featureFlags,
-      mcpServers
+      mcpServers,
+      pendingApprovalsList
     ] = await Promise.all([
       this.prisma.agentExecution.count({ where: { organizationId: organization.id } }),
       this.prisma.agentExecution.count({
@@ -82,6 +83,12 @@ export class ObservabilityRepository {
       this.prisma.mcpServerRegistration.findMany({
         where: { organizationId: organization.id },
         orderBy: [{ name: "asc" }]
+      }),
+      this.prisma.approvalRequest.findMany({
+        where: { organizationId: organization.id, status: "PENDING" },
+        include: { agent: { select: { id: true, name: true } } },
+        orderBy: [{ createdAt: "desc" }],
+        take: 10
       })
     ]);
 
@@ -102,7 +109,8 @@ export class ObservabilityRepository {
       recentEvalRuns,
       approvalGates,
       featureFlags,
-      mcpServers
+      mcpServers,
+      pendingApprovalsList
     };
   }
 }

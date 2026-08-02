@@ -7,6 +7,7 @@ import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { GovernanceRepository } from "./governanceRepository.js";
 import { GovernanceService } from "./governanceService.js";
+import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
 import {
   approvalGateBodySchema,
   approvalRequestListQuerySchema,
@@ -20,7 +21,8 @@ export async function registerGovernanceRoutes(app: FastifyInstance) {
   const service = new GovernanceService(
     new GovernanceRepository(app.prisma),
     new AuditService(new AuditRepository(app.prisma)),
-    new TenancyService(new TenancyRepository(app.prisma))
+    new TenancyService(new TenancyRepository(app.prisma)),
+    new AgentExecutionRepository(app.prisma)
   );
 
   app.get("/approval-gates", async (request) => {

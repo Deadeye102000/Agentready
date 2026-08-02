@@ -109,6 +109,26 @@ Future work:
 - Role-based access checks
 - Audit logs for auth events
 
+### What API security hardening is in place?
+
+The API uses environment-validated CORS, request body size limits, security headers, and rate limiting. CORS rejects wildcard origins because credentialed auth cookies are enabled. Global rate limits apply to the API, with stricter limits for login and register endpoints.
+
+### How are API errors standardized?
+
+The API has one central Fastify error handler. It normalizes `HttpError`, Zod validation errors, Prisma known errors, body-limit errors, rate-limit errors, CORS errors, and internal failures into:
+
+```json
+{
+  "error": {
+    "code": "...",
+    "message": "...",
+    "details": {}
+  }
+}
+```
+
+Each error response includes a `requestId` in `details`. Production responses do not expose stack traces.
+
 ## 4. Tenancy Questions
 
 ### How is multi-tenancy modeled?
@@ -130,6 +150,10 @@ Because a malicious client could submit another organization’s ID. Tenant cont
 ### What tenancy risks remain?
 
 The next major step is automated tests for 401/403 behavior and cross-org relation rejection. Role checks are also still needed, because right now the system knows the organization but does not fully enforce user permissions inside that organization.
+
+### How does tenancy interact with request bodies?
+
+Protected route schemas omit `organizationId`. The API derives `organizationId` from `request.authContext` and passes it into services. This prevents a client from selecting another tenant by changing a request body or query parameter.
 
 ## 5. Agent Harness Questions
 
@@ -206,7 +230,48 @@ Feature flags answer “can this agent use this capability at all?” Approval g
 
 They are checked in `AgentExecutionService.recordToolCall` before storing the final tool-call trace status.
 
-## 9. Eval And Observability Questions
+## 9. Audit Logging Questions
+
+### What sensitive actions are audited?
+
+Current audited actions include:
+
+- `auth.registered`
+- `auth.logged_in`
+- `auth.logged_out`
+- `task_contract.created`
+- `agent_execution.created`
+- `agent_execution.status_changed`
+- `tool_call_trace.recorded`
+- `tool_call_trace.updated`
+- `eval_run.created`
+- `approval_gate.upserted`
+- `feature_flag.upserted`
+- `approval_request.reviewed`
+
+### What metadata does an audit log capture?
+
+Audit logs are scoped by `organizationId` and can include actor user ID, actor agent ID, action, resource type, resource ID, source, and before/after metadata where practical.
+
+### What does `source` mean in audit metadata?
+
+`source` describes the origin of the action:
+
+- `HUMAN`: user-driven action
+- `AGENT`: agent-driven action
+- `SYSTEM`: platform/system action
+
+The Prisma `actorType` still uses the existing enum values: `USER`, `AGENT`, or `SYSTEM`.
+
+### How can audit logs be queried?
+
+The API exposes `GET /api/v1/audit-logs`, protected by auth and scoped to the current organization. It returns recent audit logs and supports an optional `limit` query parameter capped at 100.
+
+### Are audit failures ignored?
+
+No. Audit writes for critical sensitive actions are awaited. If the database audit write fails, the core action is allowed to fail rather than silently pretending it was audited.
+
+## 10. Eval And Observability Questions
 
 ### What is an EvalRun?
 
@@ -232,7 +297,7 @@ The dashboard aggregates current organization data:
 
 The observability route uses authenticated org context and the repository aggregates only by that organization ID.
 
-## 10. Database And Prisma Questions
+## 11. Database And Prisma Questions
 
 ### Why Prisma?
 
@@ -258,7 +323,7 @@ Prisma gives type-safe database access and clear schema modeling. It fits the Ty
 
 Some JSON fields are used for flexible agent payloads, such as inputs, outputs, eval checks, and metadata. This is useful early, but high-value fields may later become typed relational models.
 
-## 11. Frontend Questions
+## 12. Frontend Questions
 
 ### What is implemented on the frontend?
 
@@ -272,7 +337,7 @@ The current work prioritized API auth and tenant safety. A login/register UI is 
 
 The frontend currently defines dashboard types locally instead of consuming shared API response types. That should be cleaned up as the API stabilizes.
 
-## 12. Testing And Quality Questions
+## 13. Testing And Quality Questions
 
 ### What checks currently pass?
 
@@ -294,8 +359,10 @@ Priority tests:
 - tool calls always create traces
 - approval gates and feature flags block/approve correctly
 - observability aggregates only current org data
+- audit logs are written for sensitive actions
+- standardized error responses for validation, auth, Prisma, rate limit, and body-limit failures
 
-## 13. Tradeoff Questions
+## 14. Tradeoff Questions
 
 ### Why not Kafka or Kubernetes?
 
@@ -315,7 +382,7 @@ The modular monolith can scale by extracting modules:
 
 Treating agent activity as governed execution rather than generic CRUD. The core primitives are contracts, executions, traces, gates, evals, and audit logs.
 
-## 14. Weak Spots To Be Honest About
+## 15. Weak Spots To Be Honest About
 
 ### What would you improve next?
 
@@ -326,12 +393,12 @@ Treating agent activity as governed execution rather than generic CRUD. The core
 5. Add migration files and seed hardening.
 6. Add worker abstraction for queued executions.
 7. Add typed API response contracts.
-8. Add audit events for auth and trace updates.
+8. Add frontend screens for audit logs and security settings.
 
 ### What is not production-ready yet?
 
 The foundation is production-minded, but not complete. Missing areas include RBAC, password reset, SSO, test coverage, observability infrastructure, background workers, deployment hardening, and migration workflow.
 
-## 15. Strong Closing Pitch
+## 16. Strong Closing Pitch
 
 AgentReady is built around the idea that companies will not trust agents just because they can call tools. They will trust agents when every action is scoped, authorized, traced, evaluated, and auditable. This codebase establishes that foundation as a modular monolith, keeping the system simple today while preserving clean seams for workers, MCP support, eval infrastructure, and enterprise governance later.

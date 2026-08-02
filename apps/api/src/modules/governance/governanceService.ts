@@ -1,4 +1,4 @@
-import type { ApprovalStatus } from "@agentready/db";
+import type { ApprovalStatus, AgentExecutionStatus } from "@agentready/db";
 import type { z } from "zod";
 import {
   upsertAgentFeatureFlagSchema,
@@ -9,6 +9,8 @@ import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { GovernanceRepository } from "./governanceRepository.js";
+import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
+import { assertExecutionTransition } from "../agent-executions/executionStateMachine.js";
 
 type UpsertApprovalGateInput = z.infer<typeof upsertApprovalGateSchema>;
 type UpsertFeatureFlagInput = z.infer<typeof upsertAgentFeatureFlagSchema>;
@@ -17,7 +19,8 @@ export class GovernanceService {
   constructor(
     private readonly governance: GovernanceRepository,
     private readonly audit: AuditService,
-    private readonly tenancy: TenancyService
+    private readonly tenancy: TenancyService,
+    private readonly executions: AgentExecutionRepository
   ) {}
 
   listApprovalGates(input: { organizationId: string }) {
@@ -112,6 +115,38 @@ export class GovernanceService {
         message: "Approval request was not found for this organization",
         statusCode: 404
       });
+    }
+
+    const payload = existing.payload as any;
+    if (payload && typeof payload === "object" && payload.executionId) {
+      const executionId = payload.executionId;
+      const execution = await this.executions.findById({
+        organizationId: input.organizationId,
+        id: executionId
+      });
+      if (execution && execution.status === "WAITING_FOR_APPROVAL") {
+        const nextStatus: AgentExecutionStatus = input.status === "APPROVED" ? "RUNNING" : "FAILED";
+        const output = input.status === "REJECTED" ? { error: "Execution rejected by user." } : undefined;
+
+        assertExecutionTransition(execution.status, nextStatus);
+
+        await this.executions.updateStatus({
+          organizationId: input.organizationId,
+          id: executionId,
+          status: nextStatus,
+          output
+        });
+
+        await this.audit.record({
+          organizationId: input.organizationId,
+          source: "SYSTEM",
+          action: "agent_execution.status_changed",
+          resourceType: "AgentExecution",
+          resourceId: executionId,
+          before: { status: execution.status, output: execution.output },
+          after: { status: nextStatus, output }
+        });
+      }
     }
 
     await this.audit.record({

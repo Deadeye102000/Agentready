@@ -63,8 +63,16 @@ export const upsertApprovalGateSchema = z.object({
   organizationId: z.string().min(1),
   capability: z.string().min(1),
   mode: approvalGateModeSchema,
-  reason: z.string().optional()
+  reason: z.string().optional(),
+  riskLevel: z.number().int().min(0).max(100).optional().default(0),
+  enabled: z.boolean().optional().default(true)
 });
+
+export function matchPattern(pattern: string, action: string): boolean {
+  const regexStr = "^" + pattern.split("*").map(s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")).join(".*") + "$";
+  const regex = new RegExp(regexStr);
+  return regex.test(action);
+}
 
 export const upsertAgentFeatureFlagSchema = z.object({
   organizationId: z.string().min(1),

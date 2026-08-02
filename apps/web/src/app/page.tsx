@@ -43,6 +43,15 @@ type DashboardData = {
     agent: { name: string } | null;
   }>;
   mcpServers: Array<{ id: string; name: string; status: string; capabilities: string[] }>;
+  pendingApprovalsList: Array<{
+    id: string;
+    requestedAction: string;
+    reason: string;
+    status: string;
+    agent: { name: string };
+    payload: any;
+    createdAt: string;
+  }>;
 };
 
 const fallbackDashboard: DashboardData = {
@@ -125,6 +134,17 @@ const fallbackDashboard: DashboardData = {
       name: "AgentReady MCP Gateway",
       status: "PLANNED",
       capabilities: ["contracts.read", "executions.create", "tool-traces.write"]
+    }
+  ],
+  pendingApprovalsList: [
+    {
+      id: "demo-approval-request",
+      requestedAction: "external.publish",
+      reason: "Customer-visible publishing must remain human-reviewed.",
+      status: "PENDING",
+      agent: { name: "Demo Agent" },
+      payload: {},
+      createdAt: new Date().toISOString()
     }
   ]
 };
@@ -225,6 +245,27 @@ export default async function HomePage() {
                 </div>
               </article>
             ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panelHeader">
+            <h2>Pending approvals</h2>
+            <span>{dashboard.pendingApprovalsList.length} request(s)</span>
+          </div>
+          <div className="stack">
+            {dashboard.pendingApprovalsList.map((request) => (
+              <div className="compactRow" key={request.id}>
+                <div>
+                  <strong>{request.requestedAction}</strong>
+                  <span className="muted">{request.agent.name} · {request.reason}</span>
+                </div>
+                <span className="pill warn">{request.status}</span>
+              </div>
+            ))}
+            {dashboard.pendingApprovalsList.length === 0 && (
+              <div className="muted text-center" style={{ padding: "1rem 0", textAlign: "center" }}>No pending approvals</div>
+            )}
           </div>
         </div>
 

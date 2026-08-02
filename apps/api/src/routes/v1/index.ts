@@ -32,15 +32,17 @@ export async function registerV1Routes(app: FastifyInstance) {
 
   await registerAuthRoutes(app);
 
-  app.addHook("preHandler", async (request) => {
-    request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
-    enforceTenantScope(request);
-  });
+  await app.register(async (protectedApp) => {
+    protectedApp.addHook("preHandler", async (request) => {
+      request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+      enforceTenantScope(request);
+    });
 
-  await registerTaskContractRoutes(app);
-  await registerAgentExecutionRoutes(app);
-  await registerEvalRunRoutes(app);
-  await registerGovernanceRoutes(app);
-  await registerObservabilityRoutes(app);
-  await registerAuditRoutes(app);
+    await registerTaskContractRoutes(protectedApp);
+    await registerAgentExecutionRoutes(protectedApp);
+    await registerEvalRunRoutes(protectedApp);
+    await registerGovernanceRoutes(protectedApp);
+    await registerObservabilityRoutes(protectedApp);
+    await registerAuditRoutes(protectedApp);
+  });
 }

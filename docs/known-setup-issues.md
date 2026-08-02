@@ -102,12 +102,52 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Impact: Direct calls to dashboard, executions, contracts, evals, governance, and observability endpoints return `401` unless the request includes a valid `agentready_session` cookie.
 - Revisit when: Adding frontend login UI and API client helpers.
 
+## Audit log endpoint is protected and org-scoped
+
+- Current endpoint: `GET /api/v1/audit-logs`
+- Requires: valid `agentready_session` cookie.
+- Optional query: `limit`, capped at 100.
+- Impact: Manual API testing requires login first. Without a session, the endpoint returns a standardized `401 UNAUTHORIZED` response.
+- Revisit when: Adding frontend audit log UI and route/API docs.
+
+## Sensitive action audit logs can make writes fail
+
+- Current behavior: Audit writes for sensitive actions are awaited.
+- Reason: For critical actions, it is safer to fail than to perform the action without a reliable audit record.
+- Impact: If the database is unavailable or audit insert fails, actions such as login/register, task contract creation, execution creation, approval review, feature flag toggles, and gate updates may fail.
+- Revisit when: Deciding whether to introduce transactional audit writes or an outbox pattern.
+
 ## Organization ID is now server-derived
 
 - Current behavior: Protected route schemas omit `organizationId`; routes derive it from `request.authContext`.
 - Impact: Older manual API calls that include `organizationId` in query/body may fail validation or be ignored depending on the route.
 - Correct pattern: Log in first, keep the HTTP-only cookie, then call protected APIs without sending `organizationId`.
 - Revisit when: Updating API docs, curl examples, and frontend data fetching.
+
+## Error responses are standardized
+
+- Current shape:
+  ```json
+  {
+    "error": {
+      "code": "...",
+      "message": "...",
+      "details": {
+        "requestId": "..."
+      }
+    }
+  }
+  ```
+- Normalized cases include:
+  - Zod validation errors
+  - `HttpError`
+  - Prisma known errors such as `P2002`, `P2025`, and `P2003`
+  - body-limit errors
+  - rate-limit errors
+  - CORS denials
+  - internal errors
+- Impact: Any frontend/API client should read errors from `error.code`, `error.message`, and `error.details`.
+- Revisit when: Generating typed API clients or adding frontend error states.
 
 ## Frontend dashboard still has demo fallback behavior
 

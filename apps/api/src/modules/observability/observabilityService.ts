@@ -17,7 +17,8 @@ const emptyDashboard = {
   recentEvalRuns: [],
   approvalGates: [],
   featureFlags: [],
-  mcpServers: []
+  mcpServers: [],
+  pendingApprovalsList: []
 };
 
 export class ObservabilityService {

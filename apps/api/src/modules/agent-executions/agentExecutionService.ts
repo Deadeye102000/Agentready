@@ -1,7 +1,8 @@
 import type { AgentExecutionStatus, ToolCallStatus } from "@agentready/db";
-import type {
+import {
   CreateAgentExecutionInput,
-  CreateToolCallTraceInput
+  CreateToolCallTraceInput,
+  matchPattern
 } from "@agentready/shared";
 import { HttpError } from "../../lib/httpError.js";
 import { toInputJson } from "../../lib/json.js";
@@ -166,22 +167,29 @@ export class AgentExecutionService {
       agentId: input.agentId,
       capability: input.toolName
     });
-    const gate = await this.governance.findApprovalGate({
-      organizationId: input.organizationId,
-      capability: input.toolName
+    const gates = await this.governance.listApprovalGates({
+      organizationId: input.organizationId
     });
+
+    const matchingGates = gates.filter(
+      (g) => g.enabled && matchPattern(g.capability, input.toolName)
+    );
+    matchingGates.sort((a, b) => b.capability.length - a.capability.length);
+    const gate = matchingGates[0];
 
     let status: ToolCallStatus = input.status;
     let error = input.error;
     let approvalRequestId = input.approvalRequestId;
 
+    const gateTriggers = gate && execution.riskScore >= gate.riskLevel;
+
     if (!featureFlag || featureFlag.state === "DISABLED") {
       status = "BLOCKED";
       error = `Capability ${input.toolName} is disabled for this agent.`;
-    } else if (gate?.mode === "BLOCKED") {
+    } else if (gateTriggers && gate.mode === "BLOCKED") {
       status = "BLOCKED";
       error = gate.reason ?? `Capability ${input.toolName} is blocked by policy.`;
-    } else if (gate?.mode === "REQUIRE_APPROVAL" && status !== "BLOCKED") {
+    } else if (gateTriggers && gate.mode === "REQUIRE_APPROVAL" && status !== "BLOCKED") {
       const approval = await this.governance.createApprovalRequest({
         organizationId: input.organizationId,
         agentId: input.agentId,
@@ -196,7 +204,7 @@ export class AgentExecutionService {
       });
       approvalRequestId = approval.id;
       status = "BLOCKED";
-      error = "Approval required before this tool call can continue.";
+      error = "approval_requested";
 
       if (execution.status === "RUNNING") {
         await this.transition({
