@@ -291,9 +291,22 @@ No. Audit writes for critical sensitive actions are awaited. If the database aud
 
 ## 10. Eval And Observability Questions
 
-### What is an EvalRun?
+### What is an EvalCase?
 
-An eval run records whether an execution or contract passed a set of checks. It includes score, threshold, checks, findings, and status.
+An `EvalCase` represents a test case for an agent. It defines a `taskContractId`, an input payload, an expected status, expected tools to be called, and success criteria.
+
+### How are evaluations executed and scored?
+
+Evaluations run case executions through the actual execution harness (creating an execution, transitioning from `QUEUED` to `RUNNING` to terminal state, and recording tool call traces). They are scored deterministically by comparing the actual terminal status against `expectedStatus` (statusMatch) and the actual tool calls list against `expectedTools` (toolsMatch).
+The formula is: `score = (statusMatch + toolsMatch) / 2` (range 0.0 to 1.0). A case passes if `score === 1.0`. Mismatches generate detailed failure reasons, checks lists, and findings.
+
+### What is Eval Regression Comparison?
+
+An evaluation regression comparison analyzes current run metrics against the immediate previous run metrics for each case in the contract or suite. It computes:
+- Previous average score vs. current average score, and the delta change (worsened or improved).
+- Previous pass rate vs. current pass rate, and the pass rate change.
+- Newly failing cases (passed previously, now failed).
+- Newly passing cases (failed previously, now passed).
 
 ### What does the dashboard show?
 
@@ -304,6 +317,7 @@ The dashboard aggregates current organization data:
 - tool-call counts
 - blocked calls
 - eval pass rate
+- evaluation regression analytics panel (comparing scores, pass rates, and newly passing/failing cases)
 - recent executions
 - recent tool calls
 - eval runs
@@ -369,10 +383,12 @@ The repo has been verified with:
   - Execution State Machine: valid lifecycle state flow assertions, blocking finalized state overrides, transitioning to failed status on block.
   - Governance: Wildcard approval gates, risk thresholds, pauses for WAITING_FOR_APPROVAL status, manual approvals queue.
   - Feature Flags: blocked runs, tool traces, evals, and MCP access, auto-approval overrides, toggle audit logs.
+  - Eval Framework: case creation, listings, runCase executions with state machine integration, scoring, and suite runs.
+  - Regression Analytics: previous/current score and pass-rate changes, newly passing/failing cases calculations.
 
 ### What is the automated test architecture?
 
-Integration tests run on Fastify using `supertest`/`app.inject` without requiring a live Postgres instance, utilizing a fully in-memory DB mock client in `apps/api/test/mockPrisma.ts`. All 25 test cases execute and pass successfully.
+Integration tests run on Fastify using `supertest`/`app.inject` without requiring a live Postgres instance, utilizing a fully in-memory DB mock client in `apps/api/test/mockPrisma.ts`. All 32 test cases execute and pass successfully.
 
 ### What tests are still needed?
 

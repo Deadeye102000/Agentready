@@ -563,7 +563,8 @@ mockPrisma.evalRun.findMany = async (args: any) => {
       (!where.organizationId || er.organizationId === where.organizationId) &&
       (!where.projectId || er.projectId === where.projectId) &&
       (!where.executionId || er.executionId === where.executionId) &&
-      (!where.evalCaseId || er.evalCaseId === where.evalCaseId)
+      (!where.evalCaseId || er.evalCaseId === where.evalCaseId) &&
+      (!where.contractId || er.contractId === where.contractId)
   );
   return matches.map((er) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === er.agentId);

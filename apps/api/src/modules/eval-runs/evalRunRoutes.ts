@@ -15,7 +15,8 @@ import {
   evalRunListQuerySchema,
   createEvalCaseBodySchema,
   evalCaseListQuerySchema,
-  runEvalSuiteBodySchema
+  runEvalSuiteBodySchema,
+  evalRegressionQuerySchema
 } from "./evalRunSchemas.js";
 
 export async function registerEvalRunRoutes(app: FastifyInstance) {
@@ -43,6 +44,15 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     const context = requireOrgContext(request);
     const query = evalRunListQuerySchema.parse(request.query);
     return service.list({ ...query, organizationId: context.organizationId });
+  });
+
+  app.get("/eval-runs/regression", async (request) => {
+    const context = requireOrgContext(request);
+    const query = evalRegressionQuerySchema.parse(request.query);
+    return service.getRegressionReport({
+      organizationId: context.organizationId,
+      contractId: query.contractId
+    });
   });
 
   app.post("/eval-runs", async (request, reply) => {

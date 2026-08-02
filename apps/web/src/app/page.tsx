@@ -56,6 +56,17 @@ type DashboardData = {
   }>;
 };
 
+type RegressionData = {
+  previousScore: number | null;
+  currentScore: number | null;
+  delta: number | null;
+  previousPassRate: number | null;
+  currentPassRate: number | null;
+  passRateChange: number | null;
+  newlyFailing: Array<{ id: string; name: string }>;
+  newlyPassing: Array<{ id: string; name: string }>;
+};
+
 const fallbackDashboard: DashboardData = {
   organization: { id: "demo-org", name: "Demo Organization", slug: "demo-org" },
   metrics: {
@@ -151,6 +162,17 @@ const fallbackDashboard: DashboardData = {
   ]
 };
 
+const fallbackRegression: RegressionData = {
+  previousScore: 0.85,
+  currentScore: 0.90,
+  delta: 0.05,
+  previousPassRate: 0.80,
+  currentPassRate: 0.90,
+  passRateChange: 0.10,
+  newlyFailing: [],
+  newlyPassing: [{ id: "case-pass-demo", name: "Verify file writing capabilities" }]
+};
+
 async function getDashboard(): Promise<DashboardData> {
   const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:4000";
 
@@ -166,6 +188,24 @@ async function getDashboard(): Promise<DashboardData> {
     return (await response.json()) as DashboardData;
   } catch {
     return fallbackDashboard;
+  }
+}
+
+async function getRegression(): Promise<RegressionData> {
+  const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:4000";
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/eval-runs/regression`, {
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      return fallbackRegression;
+    }
+
+    return (await response.json()) as RegressionData;
+  } catch {
+    return fallbackRegression;
   }
 }
 
@@ -190,7 +230,7 @@ function statusClass(status: string) {
 }
 
 export default async function HomePage() {
-  const dashboard = await getDashboard();
+  const [dashboard, regression] = await Promise.all([getDashboard(), getRegression()]);
   const evalPassRate =
     dashboard.metrics.evalRuns === 0 ? 0 : dashboard.metrics.passedEvalRuns / dashboard.metrics.evalRuns;
 
@@ -228,6 +268,78 @@ export default async function HomePage() {
       </section>
 
       <section className="workspace">
+        <div className="panel wide">
+          <div className="panelHeader">
+            <h2>Evaluation regression analysis</h2>
+            <span>Compare latest run against history</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
+              <span className="muted">Score comparison</span>
+              <strong style={{ fontSize: "1.5rem" }}>
+                {formatPercent(regression.currentScore)} 
+                {regression.delta !== null && (
+                  <span style={{ fontSize: "0.875rem", marginLeft: "0.5rem", color: regression.delta >= 0 ? "#10b981" : "#ef4444" }}>
+                    {regression.delta >= 0 ? "+" : ""}{formatPercent(regression.delta)}
+                  </span>
+                )}
+              </strong>
+              <span className="muted" style={{ fontSize: "0.875rem" }}>Previous: {formatPercent(regression.previousScore)}</span>
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
+              <span className="muted">Pass rate change</span>
+              <strong style={{ fontSize: "1.5rem" }}>
+                {formatPercent(regression.currentPassRate)}
+                {regression.passRateChange !== null && (
+                  <span style={{ fontSize: "0.875rem", marginLeft: "0.5rem", color: regression.passRateChange >= 0 ? "#10b981" : "#ef4444" }}>
+                    {regression.passRateChange >= 0 ? "+" : ""}{formatPercent(regression.passRateChange)}
+                  </span>
+                )}
+              </strong>
+              <span className="muted" style={{ fontSize: "0.875rem" }}>Previous: {formatPercent(regression.previousPassRate)}</span>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div>
+              <h3 style={{ fontSize: "0.9rem", fontWeight: "bold", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981" }}></span>
+                Newly passing ({regression.newlyPassing.length})
+              </h3>
+              <div className="stack" style={{ fontSize: "0.875rem" }}>
+                {regression.newlyPassing.map((c) => (
+                  <div key={c.id} className="compactRow" style={{ padding: "0.5rem 0" }}>
+                    <span>{c.name}</span>
+                    <span className="pill good">PASSED</span>
+                  </div>
+                ))}
+                {regression.newlyPassing.length === 0 && (
+                  <span className="muted" style={{ display: "block", padding: "0.5rem 0" }}>None</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: "0.9rem", fontWeight: "bold", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#ef4444" }}></span>
+                Newly failing ({regression.newlyFailing.length})
+              </h3>
+              <div className="stack" style={{ fontSize: "0.875rem" }}>
+                {regression.newlyFailing.map((c) => (
+                  <div key={c.id} className="compactRow" style={{ padding: "0.5rem 0" }}>
+                    <span>{c.name}</span>
+                    <span className="pill bad">FAILED</span>
+                  </div>
+                ))}
+                {regression.newlyFailing.length === 0 && (
+                  <span className="muted" style={{ display: "block", padding: "0.5rem 0" }}>None</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="panel wide">
           <div className="panelHeader">
             <h2>Execution harness</h2>

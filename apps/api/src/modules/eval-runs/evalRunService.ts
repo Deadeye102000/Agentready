@@ -354,4 +354,104 @@ export class EvalRunService {
 
     return runs;
   }
+
+  async getRegressionReport(input: { organizationId: string; contractId?: string }) {
+    if (input.contractId) {
+      await this.tenancy.requireContract({
+        organizationId: input.organizationId,
+        contractId: input.contractId
+      });
+    }
+
+    const runs = await this.prisma.evalRun.findMany({
+      where: {
+        organizationId: input.organizationId,
+        contractId: input.contractId || undefined
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    const runsByCase = new Map<string, typeof runs>();
+    for (const run of runs) {
+      if (!run.evalCaseId) continue;
+      if (!runsByCase.has(run.evalCaseId)) {
+        runsByCase.set(run.evalCaseId, []);
+      }
+      runsByCase.get(run.evalCaseId)!.push(run);
+    }
+
+    for (const caseRuns of runsByCase.values()) {
+      caseRuns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
+    let previousTotalScore = 0;
+    let previousScoreCount = 0;
+    let currentTotalScore = 0;
+    let currentScoreCount = 0;
+
+    let previousPasses = 0;
+    let previousTotalRuns = 0;
+    let currentPasses = 0;
+    let currentTotalRuns = 0;
+
+    const newlyFailing: Array<{ id: string; name: string }> = [];
+    const newlyPassing: Array<{ id: string; name: string }> = [];
+
+    for (const [caseId, caseRuns] of runsByCase.entries()) {
+      const currentRun = caseRuns[0];
+      const previousRun = caseRuns[1];
+
+      const evalCase = await this.prisma.evalCase.findFirst({
+        where: { id: caseId }
+      });
+      const caseName = evalCase?.name || `Case ${caseId}`;
+
+      if (currentRun.score !== null && currentRun.score !== undefined) {
+        currentTotalScore += currentRun.score;
+        currentScoreCount++;
+      }
+      currentTotalRuns++;
+      if (currentRun.status === "PASSED") {
+        currentPasses++;
+      }
+
+      if (previousRun) {
+        if (previousRun.score !== null && previousRun.score !== undefined) {
+          previousTotalScore += previousRun.score;
+          previousScoreCount++;
+        }
+        previousTotalRuns++;
+        if (previousRun.status === "PASSED") {
+          previousPasses++;
+        }
+
+        if (previousRun.status === "PASSED" && currentRun.status === "FAILED") {
+          newlyFailing.push({ id: caseId, name: caseName });
+        } else if (previousRun.status === "FAILED" && currentRun.status === "PASSED") {
+          newlyPassing.push({ id: caseId, name: caseName });
+        }
+      }
+    }
+
+    const previousScore = previousScoreCount > 0 ? previousTotalScore / previousScoreCount : null;
+    const currentScore = currentScoreCount > 0 ? currentTotalScore / currentScoreCount : null;
+    const delta = (currentScore !== null && previousScore !== null) ? currentScore - previousScore : null;
+
+    const previousPassRate = previousTotalRuns > 0 ? previousPasses / previousTotalRuns : null;
+    const currentPassRate = currentTotalRuns > 0 ? currentPasses / currentTotalRuns : null;
+    const passRateChange = (currentPassRate !== null && previousPassRate !== null) ? currentPassRate - previousPassRate : null;
+
+    return {
+      previousScore,
+      currentScore,
+      delta,
+      previousPassRate,
+      currentPassRate,
+      passRateChange,
+      newlyFailing,
+      newlyPassing
+    };
+  }
 }

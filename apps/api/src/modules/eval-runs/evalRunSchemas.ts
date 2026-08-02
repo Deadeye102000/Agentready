@@ -19,3 +19,7 @@ export const runEvalSuiteBodySchema = z.object({
   taskContractId: z.string().min(1).optional(),
   projectId: z.string().min(1).optional()
 });
+
+export const evalRegressionQuerySchema = z.object({
+  contractId: z.string().min(1).optional()
+});

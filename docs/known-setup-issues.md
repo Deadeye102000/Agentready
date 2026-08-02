@@ -185,3 +185,11 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Result: Prisma's generated compound query types enforce that compound fields cannot be `null`, making standard unique `upsert` calls on nullable fields fail typechecking.
 - Fix: Perform an existence check first using `findFirst` (which accepts `null` in its `where` clause) followed by a separate `create` or `update` call.
 - Revisit when: Designing database indexes for governance resources.
+
+## Mock DB Client does not automatically implement sorting or relation loading
+
+- Context: The integration tests run against `mockPrisma.ts` using an in-memory MockStore.
+- Result: Arguments like `orderBy: { createdAt: "desc" }` or nested `include` blocks are ignored by the simple array-based find operations unless explicitly implemented in the override mock handlers.
+- Fix: Ensure service layers perform manual sort operations on grouped results (e.g. `caseRuns.sort((a, b) => new Date(b.createdAt).getTime() - ...)`), and update mock handlers in `mockPrisma.ts` to manually resolve relations.
+- Revisit when: Modifying or creating new mock client handlers for integration tests.
+
