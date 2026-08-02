@@ -419,3 +419,108 @@ export async function fetchExecutionDetail(id: string): Promise<ApiResult<Execut
     };
   }
 }
+
+// ─── Approval Queue ───────────────────────────────────────────────────────────
+
+export type ApprovalRequest = {
+  id: string;
+  status: string;
+  requestedAction: string;
+  reason: string | null;
+  riskLevel: string | null;
+  payload: any;
+  note: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  executionId: string | null;
+  agent: { id: string; name: string } | null;
+  reviewedByUser: { id: string; email: string; name: string | null } | null;
+};
+
+export const fallbackApprovalRequests: ApprovalRequest[] = [
+  {
+    id: "approval-demo-1",
+    status: "PENDING",
+    requestedAction: "external.publish",
+    reason: "Action matches approval gate: Customer-facing deployments require human signoff.",
+    riskLevel: "HIGH",
+    payload: {
+      executionId: "demo-execution-detail",
+      path: "/docs/onboarding",
+      content: "# Onboarding Guide\n\nWelcome to Acme Systems..."
+    },
+    note: null,
+    createdAt: new Date(Date.now() - 1200000).toISOString(),
+    reviewedAt: null,
+    executionId: "demo-execution-detail",
+    agent: { id: "agent-1", name: "DocGen Agent" },
+    reviewedByUser: null
+  },
+  {
+    id: "approval-demo-2",
+    status: "PENDING",
+    requestedAction: "database.schema.alter",
+    reason: "Action matches approval gate: Schema migrations require senior engineer review.",
+    riskLevel: "CRITICAL",
+    payload: {
+      executionId: "exec-102",
+      table: "users",
+      migration: "ALTER TABLE users ADD COLUMN sso_provider VARCHAR(255);"
+    },
+    note: null,
+    createdAt: new Date(Date.now() - 600000).toISOString(),
+    reviewedAt: null,
+    executionId: "exec-102",
+    agent: { id: "agent-2", name: "DB Migration Agent" },
+    reviewedByUser: null
+  }
+];
+
+const getClientApiBaseUrl = () =>
+  process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
+
+export async function fetchApprovalRequests(status?: string): Promise<ApiResult<ApprovalRequest[]>> {
+  const base = getClientApiBaseUrl();
+  const url = status
+    ? `${base}/api/v1/approval-requests?status=${status}`
+    : `${base}/api/v1/approval-requests`;
+
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      return { data: fallbackApprovalRequests, error: `HTTP ${res.status}: ${res.statusText}`, isFallback: true };
+    }
+    const data = (await res.json()) as ApprovalRequest[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: fallbackApprovalRequests,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: true,
+    };
+  }
+}
+
+export async function reviewApprovalRequest(
+  id: string,
+  status: "APPROVED" | "REJECTED",
+  note?: string
+): Promise<{ ok: boolean; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/approval-requests/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, note }),
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: (body as any)?.error?.message || `HTTP ${res.status}` };
+    }
+    return { ok: true, error: null };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
+  }
+}
+

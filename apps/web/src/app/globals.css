@@ -429,6 +429,139 @@ select {
   }
 }
 
+/* Approval Queue Cards */
+.approvalCard {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.15s ease;
+}
+
+.approvalCard:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+}
+
+.approvalCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.approvalReason {
+  font-size: 0.875rem;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.payloadPre {
+  margin: 0;
+  font-size: 0.78rem;
+  font-family: "Menlo", "Monaco", "Consolas", monospace;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* Action Buttons */
+.approveBtn {
+  border: 1.5px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+  border-radius: 7px;
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.approveBtn:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.approveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rejectBtn {
+  border: 1.5px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 7px;
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rejectBtn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.rejectBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Rejection Modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modalCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 28px 28px 24px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+}
+
+/* Topbar */
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .approvalCardHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
 /* Responsive Media Queries */
 @media (max-width: 1200px) {
   .metricGrid {
