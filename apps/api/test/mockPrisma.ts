@@ -16,6 +16,7 @@ export interface MockStore {
   featureFlags: any[];
   approvalGates: any[];
   approvalRequests: any[];
+  evalCases: any[];
 }
 
 export const mockStore: MockStore = {
@@ -33,6 +34,7 @@ export const mockStore: MockStore = {
   featureFlags: [],
   approvalGates: [],
   approvalRequests: [],
+  evalCases: [],
 };
 
 export function resetMockStore() {
@@ -50,6 +52,7 @@ export function resetMockStore() {
   mockStore.featureFlags = [];
   mockStore.approvalGates = [];
   mockStore.approvalRequests = [];
+  mockStore.evalCases = [];
 }
 
 // Helper to generate IDs
@@ -475,4 +478,102 @@ mockPrisma.approvalRequest.updateMany = async (args: any) => {
     match.updatedAt = new Date();
   }
   return { count: matches.length };
+};
+
+// Eval Cases
+mockPrisma.evalCase.create = async (args: any) => {
+  const data = args.data;
+  const item = {
+    id: genId(),
+    organizationId: data.organizationId,
+    taskContractId: data.taskContractId,
+    name: data.name,
+    input: data.input || {},
+    expectedStatus: data.expectedStatus || null,
+    expectedTools: data.expectedTools || [],
+    successCriteria: data.successCriteria || null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mockStore.evalCases.push(item);
+  return item;
+};
+
+mockPrisma.evalCase.findMany = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.evalCases.filter(
+    (c) =>
+      (!where.organizationId || c.organizationId === where.organizationId) &&
+      (!where.taskContractId || c.taskContractId === where.taskContractId)
+  );
+};
+
+mockPrisma.evalCase.findUnique = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.evalCases.find((c) => c.id === where.id) || null;
+};
+
+mockPrisma.evalCase.findFirst = async (args: any) => {
+  const where = args.where || {};
+  const c = mockStore.evalCases.find(
+    (c) =>
+      (!where.id || c.id === where.id) &&
+      (!where.organizationId || c.organizationId === where.organizationId)
+  );
+  if (!c) return null;
+  const contract = mockStore.taskContracts.find((tc) => tc.id === c.taskContractId);
+  return {
+    ...c,
+    taskContract: contract || null,
+  };
+};
+
+// Eval Runs
+mockPrisma.evalRun.create = async (args: any) => {
+  const data = args.data;
+  const item = {
+    id: genId(),
+    organizationId: data.organizationId,
+    projectId: data.projectId,
+    executionId: data.executionId || null,
+    contractId: data.contractId || null,
+    agentId: data.agentId || null,
+    evalCaseId: data.evalCaseId || null,
+    name: data.name,
+    status: data.status || "QUEUED",
+    score: data.score !== undefined ? data.score : null,
+    threshold: data.threshold !== undefined ? data.threshold : 1,
+    checks: data.checks || [],
+    findings: data.findings || [],
+    failureReason: data.failureReason || null,
+    duration: data.duration !== undefined ? data.duration : null,
+    startedAt: data.startedAt || new Date(),
+    completedAt: data.completedAt || null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mockStore.evalRuns.push(item);
+  return item;
+};
+
+mockPrisma.evalRun.findMany = async (args: any) => {
+  const where = args.where || {};
+  const matches = mockStore.evalRuns.filter(
+    (er) =>
+      (!where.organizationId || er.organizationId === where.organizationId) &&
+      (!where.projectId || er.projectId === where.projectId) &&
+      (!where.executionId || er.executionId === where.executionId) &&
+      (!where.evalCaseId || er.evalCaseId === where.evalCaseId)
+  );
+  return matches.map((er) => {
+    const agent = mockStore.agentIdentities.find((a) => a.id === er.agentId);
+    const contract = mockStore.taskContracts.find((c) => c.id === er.contractId);
+    const execution = mockStore.agentExecutions.find((e) => e.id === er.executionId);
+    return {
+      ...er,
+      agent: agent ? { id: agent.id, name: agent.name } : null,
+      contract: contract ? { id: contract.id, name: contract.name, version: contract.version } : null,
+      execution: execution ? { id: execution.id, status: execution.status, objective: execution.objective } : null,
+    };
+  });
 };

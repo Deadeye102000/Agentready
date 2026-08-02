@@ -119,6 +119,7 @@ model Organization {
   approvalRequests   ApprovalRequest[]
   auditLogs          AuditLog[]
   idempotencyKeys    IdempotencyKey[]
+  evalCases          EvalCase[]
 }
 
 model OrganizationMember {
@@ -243,6 +244,7 @@ model TaskContract {
   agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
   executions     AgentExecution[]
   evalRuns       EvalRun[]
+  evalCases      EvalCase[]
 
   @@unique([organizationId, name, version])
   @@index([organizationId, projectId])
@@ -314,12 +316,15 @@ model EvalRun {
   executionId    String?
   contractId     String?
   agentId        String?
+  evalCaseId     String?
   name           String
   status         EvalRunStatus   @default(QUEUED)
   score          Float?
   threshold      Float           @default(1)
   checks         Json            @default("[]")
   findings       Json            @default("[]")
+  failureReason  String?
+  duration       Int?
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime        @default(now())
@@ -329,12 +334,14 @@ model EvalRun {
   execution      AgentExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
   contract       TaskContract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
   agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  evalCase       EvalCase?       @relation(fields: [evalCaseId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status, createdAt])
   @@index([projectId])
   @@index([executionId])
   @@index([contractId])
   @@index([agentId])
+  @@index([evalCaseId])
 }
 
 model ApprovalGate {
@@ -469,4 +476,24 @@ model IdempotencyKey {
   @@index([organizationId, expiresAt])
   @@index([actorUserId])
   @@index([actorAgentId])
+}
+
+model EvalCase {
+  id              String        @id @default(cuid())
+  organizationId  String
+  taskContractId  String
+  name            String
+  input           Json          @default("{}")
+  expectedStatus  String?
+  expectedTools   Json          @default("[]")
+  successCriteria String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskContract    TaskContract  @relation(fields: [taskContractId], references: [id], onDelete: Cascade)
+  evalRuns        EvalRun[]
+
+  @@index([organizationId])
+  @@index([taskContractId])
 }

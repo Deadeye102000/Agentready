@@ -91,3 +91,15 @@ export type McpServerStatus = z.infer<typeof mcpServerStatusSchema>;
 export type CreateAgentExecutionInput = z.infer<typeof createAgentExecutionSchema>;
 export type CreateToolCallTraceInput = z.infer<typeof createToolCallTraceSchema>;
 export type CreateEvalRunInput = z.infer<typeof createEvalRunSchema>;
+
+export const createEvalCaseSchema = z.object({
+  organizationId: z.string().min(1),
+  taskContractId: z.string().min(1),
+  name: z.string().min(1),
+  input: jsonRecordSchema.default({}),
+  expectedStatus: z.string().optional(),
+  expectedTools: z.array(z.string()).default([]),
+  successCriteria: z.string().optional()
+});
+
+export type CreateEvalCaseInput = z.infer<typeof createEvalCaseSchema>;
