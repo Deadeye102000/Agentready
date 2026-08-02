@@ -158,9 +158,9 @@ These are unresolved environment/setup issues observed during the initial AgentR
 ## API port expectations need to stay aligned
 
 - `.env.example` sets `API_PORT=3001`.
-- The frontend uses `AGENTREADY_API_URL` or defaults to `http://localhost:4000`.
-- Impact: Without setting `AGENTREADY_API_URL=http://localhost:3001`, the dashboard may call the wrong API port and show fallback data.
-- Recommended local web env: `AGENTREADY_API_URL=http://localhost:3001`.
+- The frontend uses `NEXT_PUBLIC_AGENTREADY_API_URL` or defaults to `http://localhost:3001`.
+- Impact: Without setting `NEXT_PUBLIC_AGENTREADY_API_URL=http://localhost:3001`, the dashboard may call the wrong API port and show fallback data.
+- Recommended local web env: `NEXT_PUBLIC_AGENTREADY_API_URL=http://localhost:3001`.
 - Revisit when: Adding web `.env.example`, shared config, or Next.js rewrites.
 
 ## Initial git baseline is still important
@@ -193,3 +193,24 @@ These are unresolved environment/setup issues observed during the initial AgentR
 - Fix: Ensure service layers perform manual sort operations on grouped results (e.g. `caseRuns.sort((a, b) => new Date(b.createdAt).getTime() - ...)`), and update mock handlers in `mockPrisma.ts` to manually resolve relations.
 - Revisit when: Modifying or creating new mock client handlers for integration tests.
 
+## taskContract mock methods were missing until critical flows work
+
+- Context: `mockPrisma.ts` originally only had `taskContract.count` — it lacked `create`, `findMany`, and `findFirst`.
+- Result: Any test exercising task contract creation or listing would have failed silently (method undefined).
+- Fix applied: Added `taskContract.create`, `taskContract.findMany`, and `taskContract.findFirst` mocks to `mockPrisma.ts` during the critical flows integration test work.
+- Revisit when: Adding new models that need test coverage — always check if the mock client has the required methods.
+
+## Frontend smoke tests require tsx as a web devDependency
+
+- Context: `apps/web` previously had no `test` script and no test runner.
+- Fix applied: Added `tsx` to `devDependencies` in `apps/web/package.json` and added `test` script: `node --import tsx --test test/**/*.test.ts`.
+- The root `package.json` now has `pnpm test`, `pnpm test:api`, and `pnpm test:web` scripts.
+- Note: Frontend smoke tests do NOT require a browser, jsdom, or Next.js compilation — they test pure TypeScript logic in `apps/web/src/lib/api.ts`.
+- Revisit when: Adding component-level tests that need React DOM (would require jsdom or Playwright).
+
+## Fallback demo data must not contain secrets or sensitive patterns
+
+- Context: `apps/web/src/lib/api.ts` contains hardcoded fallback demo data for all dashboard sections and approval queue.
+- Risk: If a developer accidentally adds a real-looking token, password, or API key to fallback data, it could appear in the frontend smoke tests.
+- Prevention: The smoke test `smoke.test.ts` includes a check that scans all fallback `ApprovalRequest` payloads for secret-looking field names (`password`, `token`, `secret`, `key`, `credential`).
+- Revisit when: Expanding fallback demo data with new examples.

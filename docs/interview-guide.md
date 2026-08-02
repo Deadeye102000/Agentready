@@ -359,43 +359,76 @@ Some JSON fields are used for flexible agent payloads, such as inputs, outputs, 
 
 ### What is implemented on the frontend?
 
-The frontend currently has a Next.js dashboard at `apps/web/src/app/page.tsx`. It renders agent observability data and falls back to demo-shaped data if the API is unavailable.
+The frontend (`apps/web`) is a full Next.js 15 dashboard with the following completed pages:
+
+- **Overview dashboard** (`/`): 7 KPI metric cards (total executions, success rate, failed, pending approvals, eval pass rate, disabled critical flags, registered MCP servers), recent executions table, regression analytics card, recent tool calls, feature flags/gate status.
+- **Execution detail** (`/executions/[id]`): Full execution metadata, ordered trace timeline, color-coded event status badges, failure reason display.
+- **Approval Queue** (`/approval-queue`): Lists pending risky agent actions with approve/reject actions. Rejection requires a typed reason note. Status updates inline after decision.
+- **Feature Flags** (`/feature-flags`): Toggle capability flags per agent or org-wide.
+
+The frontend uses a centralized API client (`apps/web/src/lib/api.ts`) with typed interfaces and fallback demo data for every endpoint.
+
+### How does the approval queue work?
+
+The `/approval-queue` page fetches `GET /api/v1/approval-requests?status=PENDING`. Approve calls `POST /api/v1/approval-requests/:id/review` with `{ status: "APPROVED" }`. Reject opens a modal requiring a non-empty note before calling the same endpoint with `{ status: "REJECTED", note }`. The card updates inline without a page reload.
 
 ### Why no login UI yet?
 
-The current work prioritized API auth and tenant safety. A login/register UI is a natural next phase.
+The current work prioritized the full API governance and observability layer. A login/register UI (`/register`, `/login`) with session cookie wiring is the next frontend phase.
 
 ### What frontend risk remains?
 
-The frontend currently defines dashboard types locally instead of consuming shared API response types. That should be cleaned up as the API stabilizes.
+Response types are defined locally in `api.ts` rather than shared from `packages/shared`. This should be consolidated as the API stabilizes.
 
 ## 13. Testing And Quality Questions
 
 ### What checks currently pass?
 
-The repo has been verified with:
-- `pnpm typecheck` (workspace-wide TS compilation checks)
-- `pnpm build` (Next.js & API production bundles compile successfully)
-- Prisma schema validation
-- Complete integration test suite checking:
-  - Auth: registration, login, session signing, logout, me, route protection.
-  - Multi-tenancy: isolation between Org A and Org B resources, foreign ID injection attempts return `403 Forbidden` or `404 Not Found`.
-  - Execution State Machine: valid lifecycle state flow assertions, blocking finalized state overrides, transitioning to failed status on block.
-  - Governance: Wildcard approval gates, risk thresholds, pauses for WAITING_FOR_APPROVAL status, manual approvals queue.
-  - Feature Flags: blocked runs, tool traces, evals, and MCP access, auto-approval overrides, toggle audit logs.
-  - Eval Framework: case creation, listings, runCase executions with state machine integration, scoring, and suite runs.
-  - Regression Analytics: previous/current score and pass-rate changes, newly passing/failing cases calculations.
+The repo has been fully verified with:
+- `pnpm typecheck` (workspace-wide TypeScript checks)
+- `pnpm build` (Next.js + API production bundles compile successfully)
+- `pnpm test` (all 62 tests pass, 0 failures)
+
+### How many tests are there and how do they run?
+
+**62 total tests** across two workspaces, using **Node's built-in test runner** with `tsx` — no Jest, Vitest, or Mocha required:
+
+```bash
+pnpm test        # all workspaces
+pnpm test:api    # API integration tests (43 tests, 10 suites)
+pnpm test:web    # Frontend smoke tests (19 tests, 6 suites)
+```
+
+### What do the API integration tests cover?
+
+- **Auth** (5): registration, login, invalid credentials, session cookie, `/me`
+- **Execution State Machine** (6): valid/invalid lifecycle transitions, terminal state protection
+- **Tenancy** (3): cross-org isolation, 403/404 boundary enforcement, foreign ID injection
+- **Approval Gates** (~11): wildcard gate patterns, risk thresholds, WAITING_FOR_APPROVAL pause, approval/rejection lifecycle
+- **Feature Flags** (6): blocked capabilities, toggle API, auto-approval override, audit log writes
+- **Eval Framework** (6): case creation, scoring formula, suite runs, flag-blocked eval
+- **Eval Regression** (1): delta computation, newly passing/failing case detection
+- **Critical Flows** (11): end-to-end chain — register→login→contract→execution→trace→gate→approve→reject→eval
+
+### What are the frontend smoke tests?
+
+19 tests in `apps/web/test/smoke.test.ts` that run without a browser or jsdom. They verify:
+- Fallback dashboard data shapes (all 8 metrics ≥ 0, required fields present)
+- Approval request fallback data (correct fields, PENDING status, no secrets in payload)
+- `ApiResult<T>` type contract shape
+- All status values are known enum values (execution, tool call, eval)
+- Regression data shape and delta arithmetic
+- Feature flag and approval gate required fields and valid mode values
 
 ### What is the automated test architecture?
 
-Integration tests run on Fastify using `supertest`/`app.inject` without requiring a live Postgres instance, utilizing a fully in-memory DB mock client in `apps/api/test/mockPrisma.ts`. All 32 test cases execute and pass successfully.
+All tests use Fastify's `app.inject()` against a fully in-memory mock Prisma client (`apps/api/test/mockPrisma.ts`) — no live PostgreSQL required. Each test file calls `resetMockStore()` in `beforeEach` for full isolation between test cases.
 
 ### What tests are still needed?
 
-Future tests should cover:
-- End-to-end frontend visual flow testing
-- High concurrency and race condition tests for execution worker queues
-- Load testing and rate limit validation under stress conditions
+- End-to-end browser/Playwright tests for UI flows
+- Concurrency and race condition tests for execution workers
+- Load testing and rate limit stress validation
 
 ## 14. Tradeoff Questions
 
@@ -421,17 +454,18 @@ Treating agent activity as governed execution rather than generic CRUD. The core
 
 ### What would you improve next?
 
-1. Add role-based authorization.
-2. Add login/register frontend.
-3. Add idempotency middleware.
-4. Add migration files and seed hardening.
-5. Add worker abstraction for queued executions.
-6. Add typed API response contracts.
-7. Add frontend screen for audit logs.
+1. Add role-based authorization (RBAC — OWNER/ADMIN/MEMBER/VIEWER enforcement).
+2. Add login/register frontend screens.
+3. Add execution background worker (poll `QUEUED` → transition to `RUNNING`).
+4. Add typed API response contracts shared from `packages/shared`.
+5. Add frontend audit log UI page.
+6. Add idempotency middleware for non-idempotent writes.
+7. Add migration files and seed hardening for production deployments.
+8. Add password reset and team invite flows.
 
 ### What is not production-ready yet?
 
-The foundation is production-minded, but not complete. Missing areas include RBAC, password reset, SSO, full observability infrastructure, background workers, deployment hardening, and migration workflow.
+The foundation is production-minded but not complete. Missing: RBAC enforcement, password reset, SSO/SAML, full observability infrastructure, background workers, deployment hardening, migration workflow, and frontend auth screens.
 
 ## 16. Strong Closing Pitch
 
