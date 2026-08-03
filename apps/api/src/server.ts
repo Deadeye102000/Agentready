@@ -8,6 +8,7 @@ import { registerErrorHandlers } from "./lib/errors.js";
 import { env } from "./lib/env.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerV1Routes } from "./routes/v1/index.js";
+import { workerPlugin } from "./modules/workers/workerPlugin.js";
 
 export async function buildServer() {
   const app = Fastify({
@@ -22,6 +23,8 @@ export async function buildServer() {
   });
 
   app.decorate("prisma", prisma);
+
+  await app.register(workerPlugin);
 
   await app.register(helmet, {
     contentSecurityPolicy: env.NODE_ENV === "production" ? undefined : false
