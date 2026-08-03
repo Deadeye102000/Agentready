@@ -350,4 +350,172 @@ describe("Approval Gates Integration Tests", () => {
     const reviewAudit = mockStore.auditLogs.find((l) => l.action === "approval_request.reviewed");
     assert.ok(reviewAudit);
   });
+
+  it("Execution Start Gating - allowedTools containing REQUIRE_APPROVAL gate creates WAITING_FOR_APPROVAL status and approval request", async () => {
+    // Seed REQUIRE_APPROVAL gate for db_write with risk level 50
+    mockStore.approvalGates.push({
+      id: "gate-db",
+      organizationId: "org-1",
+      capability: "db_write",
+      mode: "REQUIRE_APPROVAL",
+      reason: "DB write requires review",
+      riskLevel: 50,
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Seed task contract allowing db_write
+    mockStore.taskContracts.push({
+      id: "contract-db-risky",
+      organizationId: "org-1",
+      projectId: "proj-1",
+      name: "Risky DB Contract",
+      version: 1,
+      objective: "Update DB records",
+      allowedTools: ["db_write"],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/executions",
+      headers: { cookie: cookieA },
+      payload: {
+        projectId: "proj-1",
+        agentId: "agent-1",
+        contractId: "contract-db-risky",
+        objective: "Perform risky DB updates",
+        riskScore: 80 // triggers gate (80 >= 50)
+      }
+    });
+
+    assert.equal(res.statusCode, 201);
+    const exec = JSON.parse(res.body);
+    assert.equal(exec.status, "WAITING_FOR_APPROVAL");
+
+    // Verify approval request created
+    const pendingReq = mockStore.approvalRequests.find((r) => r.payload.executionId === exec.id);
+    assert.ok(pendingReq);
+    assert.equal(pendingReq.status, "PENDING");
+    assert.equal(pendingReq.requestedAction, "execution.start:db_write");
+  });
+
+  it("Execution Start Gating - allowedTools containing BLOCKED gate fails creation with 403 Forbidden", async () => {
+    // Seed BLOCKED gate for file_write
+    mockStore.approvalGates.push({
+      id: "gate-file-blocked",
+      organizationId: "org-1",
+      capability: "file_write",
+      mode: "BLOCKED",
+      reason: "File write is completely blocked",
+      riskLevel: 0,
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Seed task contract allowing file_write
+    mockStore.taskContracts.push({
+      id: "contract-file-blocked",
+      organizationId: "org-1",
+      projectId: "proj-1",
+      name: "Blocked File Contract",
+      version: 1,
+      objective: "Write output to file",
+      allowedTools: ["file_write"],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/executions",
+      headers: { cookie: cookieA },
+      payload: {
+        projectId: "proj-1",
+        agentId: "agent-1",
+        contractId: "contract-file-blocked",
+        objective: "Try writing files",
+        riskScore: 10
+      }
+    });
+
+    assert.equal(res.statusCode, 403);
+    const body = JSON.parse(res.body);
+    assert.equal(body.error.code, "FORBIDDEN");
+    assert.match(body.error.message, /blocked by policy/i);
+  });
+
+  it("Execution Start Gating - allowedTools containing REQUIRE_APPROVAL gate but below riskLevel launches in QUEUED status", async () => {
+    // Seed REQUIRE_APPROVAL gate for db_write with risk level 50
+    mockStore.approvalGates.push({
+      id: "gate-db-high",
+      organizationId: "org-1",
+      capability: "db_write",
+      mode: "REQUIRE_APPROVAL",
+      reason: "DB write requires review",
+      riskLevel: 50,
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Seed task contract allowing db_write
+    mockStore.taskContracts.push({
+      id: "contract-db-safe",
+      organizationId: "org-1",
+      projectId: "proj-1",
+      name: "Safe DB Contract",
+      version: 1,
+      objective: "Read DB values mostly",
+      allowedTools: ["db_write"],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/executions",
+      headers: { cookie: cookieA },
+      payload: {
+        projectId: "proj-1",
+        agentId: "agent-1",
+        contractId: "contract-db-safe",
+        objective: "Perform safe DB updates",
+        riskScore: 30 // bypasses gate (30 < 50)
+      }
+    });
+
+    assert.equal(res.statusCode, 201);
+    const exec = JSON.parse(res.body);
+    assert.equal(exec.status, "QUEUED");
+  });
+
+  it("Execution Start Gating - MCP triggered execution includes metadata in audit logs", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/executions",
+      headers: { cookie: cookieA },
+      payload: {
+        projectId: "proj-1",
+        agentId: "agent-1",
+        objective: "Direct execution",
+        riskScore: 0,
+        metadata: {
+          source: "MCP",
+          mcpTriggered: true
+        }
+      }
+    });
+
+    assert.equal(res.statusCode, 201);
+    const exec = JSON.parse(res.body);
+
+    const audit = mockStore.auditLogs.find((l) => l.targetId === exec.id);
+    assert.ok(audit);
+    assert.equal(audit.metadata.source, "MCP");
+    assert.equal(audit.metadata.mcpTriggered, true);
+  });
 });

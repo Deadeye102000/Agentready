@@ -33,7 +33,8 @@ export const createAgentExecutionSchema = z.object({
   // Worker-readiness: callers may configure timeout and max retry attempts.
   // TODO(WORKER-READY): The execution runner reads these values when claiming work.
   timeoutMs: z.number().int().min(1000).optional(),       // e.g. 30_000 for 30 s
-  maxAttempts: z.number().int().min(1).max(10).default(1) // default: one attempt only
+  maxAttempts: z.number().int().min(1).max(10).default(1), // default: one attempt only
+  metadata: jsonRecordSchema.optional()
 });
 
 export const createToolCallTraceSchema = z.object({

@@ -25,6 +25,12 @@ export class AgentExecutionRepository {
     return this.prisma.agentExecution.create({ data });
   }
 
+  findContractById(id: string) {
+    return this.prisma.taskContract.findFirst({
+      where: { id }
+    });
+  }
+
   findById(input: { organizationId: string; id: string }) {
     return this.prisma.agentExecution.findFirst({
       where: {

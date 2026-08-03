@@ -98,13 +98,66 @@ export class AgentExecutionService {
       agentId: input.agentId
     });
 
+    let initialStatus: AgentExecutionStatus = "QUEUED";
+    let requiresApproval = false;
+    let matchingGateReason = "";
+    let matchingGateTool = "";
+
+    if (input.contractId) {
+      const contract = await this.executions.findContractById(input.contractId);
+      if (contract && Array.isArray(contract.allowedTools)) {
+        const gates = await this.governance.listApprovalGates({
+          organizationId: input.organizationId
+        });
+
+        // Determine if auto-approval feature flag is disabled
+        const autoApprovalFlag = await this.governance.findFeatureFlag({
+          organizationId: input.organizationId,
+          agentId: input.agentId,
+          capability: "auto_approval"
+        });
+        const isAutoApprovalDisabled = autoApprovalFlag && autoApprovalFlag.state === "DISABLED";
+
+        for (const toolName of contract.allowedTools as string[]) {
+          const matchingGates = gates.filter(
+            (g) => g.enabled && matchPattern(g.capability, toolName)
+          );
+          matchingGates.sort((a, b) => b.capability.length - a.capability.length);
+          const gate = matchingGates[0];
+
+          if (gate && input.riskScore >= gate.riskLevel) {
+            let effectiveMode = gate.mode;
+            if (effectiveMode === "AUTOMATIC" && isAutoApprovalDisabled) {
+              effectiveMode = "REQUIRE_APPROVAL";
+            }
+
+            if (effectiveMode === "BLOCKED") {
+              throw new HttpError({
+                code: "FORBIDDEN",
+                message: `Execution start blocked by policy: tool '${toolName}' is BLOCKED`,
+                statusCode: 403
+              });
+            } else if (effectiveMode === "REQUIRE_APPROVAL") {
+              requiresApproval = true;
+              matchingGateTool = toolName;
+              matchingGateReason = gate.reason || `Tool '${toolName}' requires human approval.`;
+            }
+          }
+        }
+      }
+    }
+
+    if (requiresApproval) {
+      initialStatus = "WAITING_FOR_APPROVAL";
+    }
+
     const execution = await this.executions.create({
       organizationId: input.organizationId,
       projectId: input.projectId,
       taskId: input.taskId,
       contractId: input.contractId,
       agentId: input.agentId,
-      status: "QUEUED",
+      status: initialStatus,
       objective: input.objective,
       input: toInputJson(input.input),
       riskScore: input.riskScore,
@@ -113,6 +166,23 @@ export class AgentExecutionService {
       maxAttempts: input.maxAttempts ?? 1,
       attemptCount: 0
     });
+
+    if (requiresApproval) {
+      await this.governance.createApprovalRequest({
+        organizationId: input.organizationId,
+        agentId: input.agentId,
+        requestedAction: `execution.start:${matchingGateTool}`,
+        reason: `Risky execution start: ${matchingGateReason}`,
+        payload: {
+          executionId: execution.id,
+          projectId: input.projectId,
+          contractId: input.contractId,
+          agentId: input.agentId,
+          riskScore: input.riskScore
+        },
+        status: "PENDING"
+      });
+    }
 
     await this.audit.record({
       organizationId: input.organizationId,
@@ -132,7 +202,8 @@ export class AgentExecutionService {
         timeoutMs: input.timeoutMs ?? null
       },
       metadata: {
-        workerReady: true
+        workerReady: true,
+        ...(input.metadata ?? {})
       }
     });
 
