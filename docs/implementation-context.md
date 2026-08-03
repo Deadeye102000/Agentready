@@ -17,7 +17,7 @@ graph TD
     apps/api --> packages/db
     apps/api --> packages/auth
     apps/api --> packages/agent-contracts
-    apps/mcp-server[apps/mcp-server<br>MCP Server Scaffold]
+    apps/mcp-server[apps/mcp-server<br>MCP Server]
     
     packages/db --> Prisma[Prisma ORM & Schema]
     packages/auth --> Crypto[scrypt & HMAC Session]
@@ -27,7 +27,7 @@ graph TD
 ### Module Layout
 - **`apps/web`**: Next.js 15 dashboard. Includes full navigation, KPI cards, execution detail view, approval queue, feature flag management, and a regression analysis panel.
 - **`apps/api`**: Fastify modular backend containing modules for tenant management, authentication, executions, governance, observability, eval framework, and auditing.
-- **`apps/mcp-server`**: A shell for future Model Context Protocol (MCP) server integration.
+- **`apps/mcp-server`**: A fully functional Model Context Protocol (MCP) server exposing read-only organization context and gated write actions (like `start_execution`) to LLM clients.
 - **`packages/db`**: Central database package containing the Prisma schema, client generator, and helper utilities.
 - **`packages/shared`**: Shared types, Zod schemas, and utility functions used across frontend and backend.
 - **`packages/auth`**: Low-level password hashing and session signature/verification routines.
@@ -125,6 +125,19 @@ graph TD
 - **Filter Tabs**: "Pending" (default) vs. "All requests".
 - **States**: Loading skeletons, empty state ("All Clear" message), error banner with fallback demo data.
 - After decision, card updates inline to show `APPROVED` / `REJECTED` without a page reload.
+
+### L. Model Context Protocol (MCP) Server
+- **Standard Protocol Integration**: Implements the Model Context Protocol using `@modelcontextprotocol/sdk` on standard I/O (stdio) transport.
+- **Read-Only Capabilities**:
+  - `list_available_tools` — fetches and combines all allowed tools across all task contracts, feature flags, and approval gates to provide a clear picture of active capability bounds.
+  - `list_task_contracts` — lists all task contracts registered in the current organization.
+  - `get_contract_context` — retrieves full details of a specific task contract.
+  - `get_execution_status` — queries the lifecycle status and metadata for a specific agent execution.
+- **Gated Write Capabilities**:
+  - `start_execution` — triggers a new execution via `POST /api/v1/executions` with proper organizational scopes.
+  - If the execution contract contains any allowed tool matched by an active `ApprovalGate` (with mode `REQUIRE_APPROVAL` and riskScore threshold met), the execution is automatically created in `WAITING_FOR_APPROVAL` status, and an `ApprovalRequest` is created.
+  - If any matching tool is `BLOCKED` by organization policy, the start request is rejected with a `403 Forbidden` response.
+- **Audit Trails**: Custom MCP metadata is forwarded and recorded in the audit logs.
 
 ---
 
@@ -231,7 +244,7 @@ pnpm test:api      # API integration tests only
 pnpm test:web      # Frontend smoke tests only
 ```
 
-### Current Coverage: 62 tests, 0 failures
+### Current coverage: 66 tests, 0 failures
 
 | Suite | Tests | Location | What it covers |
 |:---|:---|:---|:---|
@@ -239,7 +252,7 @@ pnpm test:web      # Frontend smoke tests only
 | Execution State Machine | 6 | `apps/api/test/execution-state-machine.test.ts` | Valid/invalid transitions, terminal state protection |
 | Tenancy | 3 | `apps/api/test/tenancy.test.ts` | Cross-org isolation, 403/404 boundary enforcement |
 | Feature Flags | 6 | `apps/api/test/feature-flags.test.ts` | Flag blocking, toggle, audit logs, auto-approval override |
-| Approval Gates | ~11 | `apps/api/test/approval-gates.test.ts` | Gate patterns, risk thresholds, approval lifecycle |
+| Approval Gates | 15 | `apps/api/test/approval-gates.test.ts` | Gate patterns, risk thresholds, approval lifecycle, and execution-start gating checks |
 | Eval Framework | 6 | `apps/api/test/eval-framework.test.ts` | Case creation, scoring, suite runs |
 | Eval Regression | 1 | `apps/api/test/regression.test.ts` | Delta computation, newly passing/failing |
 | **Critical Flows** | **11** | `apps/api/test/critical-flows.test.ts` | End-to-end: register→login→contract→exec→trace→approval→eval |

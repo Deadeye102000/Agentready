@@ -42,7 +42,7 @@ AgentReady is a TypeScript monorepo:
 
 - `apps/web`: Next.js frontend
 - `apps/api`: Fastify backend
-- `apps/mcp-server`: future MCP interface
+- `apps/mcp-server`: Model Context Protocol (MCP) server
 - `packages/db`: Prisma client/schema package
 - `packages/shared`: shared Zod schemas and common contract types
 - `packages/auth`: password hashing and session helpers
@@ -469,4 +469,4 @@ The foundation is production-minded but not complete. Missing: RBAC enforcement,
 
 ## 16. Strong Closing Pitch
 
-AgentReady is built around the idea that companies will not trust agents just because they can call tools. They will trust agents when every action is scoped, authorized, traced, evaluated, and auditable. This codebase establishes that foundation as a modular monolith, keeping the system simple today while preserving clean seams for workers, MCP support, eval infrastructure, and enterprise governance later.
+AgentReady is built around the idea that companies will not trust agents just because they can call tools. They will trust agents when every action is scoped, authorized, traced, evaluated, and auditable. This codebase establishes that foundation as a modular monolith, keeping the system simple today while preserving clean seams for background workers, eval infrastructure, and advanced enterprise governance later.
