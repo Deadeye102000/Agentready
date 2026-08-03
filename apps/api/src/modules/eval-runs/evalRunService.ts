@@ -190,7 +190,8 @@ export class EvalRunService {
       agentId,
       objective: `Evaluation Run: ${evalCase.name}`,
       input: (evalCase.input || {}) as Record<string, unknown>,
-      riskScore: 0
+      riskScore: 0,
+      maxAttempts: 1  // Eval runs are single-attempt by design
     });
 
     const startTime = Date.now();

@@ -237,6 +237,12 @@ mockPrisma.agentExecution.create = async (args: any) => {
     input: data.input || {},
     output: null,
     riskScore: data.riskScore || 0,
+    // Worker-readiness fields
+    maxAttempts: data.maxAttempts ?? 1,
+    attemptCount: data.attemptCount ?? 0,
+    timeoutMs: data.timeoutMs ?? null,
+    timedOutAt: data.timedOutAt ?? null,
+    failureReason: data.failureReason ?? null,
     startedAt: null,
     completedAt: null,
     createdAt: new Date(),
@@ -281,6 +287,10 @@ mockPrisma.agentExecution.updateMany = async (args: any) => {
     if (data.output !== undefined) match.output = data.output;
     if (data.startedAt !== undefined) match.startedAt = data.startedAt;
     if (data.completedAt !== undefined) match.completedAt = data.completedAt;
+    // Worker-readiness fields
+    if (data.attemptCount !== undefined) match.attemptCount = data.attemptCount;
+    if (data.timedOutAt !== undefined) match.timedOutAt = data.timedOutAt;
+    if (data.failureReason !== undefined) match.failureReason = data.failureReason;
     match.updatedAt = new Date();
   }
   return { count: matches.length };
@@ -292,7 +302,8 @@ mockPrisma.agentExecution.findMany = async (args: any) => {
     (e) =>
       (!where.organizationId || e.organizationId === where.organizationId) &&
       (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status)
+      (!where.status || e.status === where.status) &&
+      (!where.failureReason || e.failureReason === where.failureReason)
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);

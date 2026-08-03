@@ -1,3 +1,29 @@
+/**
+ * AgentExecutionService
+ *
+ * Orchestrates the full agent execution lifecycle, including governance checks,
+ * state transitions, tool-call trace recording, and audit logging.
+ *
+ * Worker-readiness boundary
+ * ─────────────────────────
+ * The public API is split into two conceptual layers:
+ *
+ *   1. "Accept" methods  — called by the API route (HTTP request context):
+ *        create()          Creates a QUEUED execution record. Returns immediately.
+ *
+ *   2. "Execute" methods — called by the ExecutionRunner (in-process today,
+ *                          a worker process tomorrow):
+ *        claimForRun()     Transitions QUEUED → RUNNING, increments attemptCount.
+ *        markTimedOut()    Marks a running execution as FAILED due to timeout.
+ *        markFailed()      Marks an execution FAILED with a structured reason.
+ *        markRetryable()   Re-queues a FAILED execution if attempts remain.
+ *        listRetryable()   Returns retryable executions for a future worker.
+ *
+ * TODO(WORKER-READY): When extracting to apps/worker, the worker process
+ * imports this service and calls claimForRun() → (agent work) → markFailed()
+ * or transition(SUCCEEDED). The route layer only ever calls create().
+ */
+
 import type { AgentExecutionStatus, ToolCallStatus } from "@agentready/db";
 import {
   CreateAgentExecutionInput,
@@ -23,10 +49,24 @@ export class AgentExecutionService {
     private readonly tenancy: TenancyService
   ) {}
 
+  // ─── Accept layer (called from API route) ───────────────────────────────────
+
   list(input: { organizationId: string; projectId?: string; status?: AgentExecutionStatus }) {
     return this.executions.list(input);
   }
 
+  /**
+   * Create a new execution in QUEUED status.
+   *
+   * Performs all governance and tenancy checks synchronously, then creates the
+   * DB record. The caller (route or test) is responsible for enqueuing the work
+   * via an ExecutionRunner after this method returns.
+   *
+   * TODO(WORKER-READY): When using a queue, the route calls:
+   *   const execution = await service.create(input);
+   *   await runner.enqueue({ id: execution.id, ... });
+   * No changes to this method are required.
+   */
   async create(input: CreateAgentExecutionInput) {
     await this.tenancy.requireProject({
       organizationId: input.organizationId,
@@ -67,7 +107,11 @@ export class AgentExecutionService {
       status: "QUEUED",
       objective: input.objective,
       input: toInputJson(input.input),
-      riskScore: input.riskScore
+      riskScore: input.riskScore,
+      // Worker-readiness fields persisted from the creation request
+      timeoutMs: input.timeoutMs,
+      maxAttempts: input.maxAttempts ?? 1,
+      attemptCount: 0
     });
 
     await this.audit.record({
@@ -83,7 +127,9 @@ export class AgentExecutionService {
         riskScore: execution.riskScore,
         projectId: execution.projectId,
         contractId: input.contractId,
-        taskId: input.taskId
+        taskId: input.taskId,
+        maxAttempts: input.maxAttempts ?? 1,
+        timeoutMs: input.timeoutMs ?? null
       },
       metadata: {
         workerReady: true
@@ -96,6 +142,194 @@ export class AgentExecutionService {
   get(input: { organizationId: string; id: string }) {
     return this.executions.findById(input);
   }
+
+  // ─── Execute layer (called from ExecutionRunner / future worker) ─────────────
+
+  /**
+   * Claim an execution for processing: QUEUED → RUNNING, increment attemptCount.
+   *
+   * Called by ExecutionRunner.run() — not by the route directly.
+   *
+   * TODO(WORKER-READY): The worker process calls this after dequeuing a job,
+   * providing idempotency protection by checking status before transitioning.
+   */
+  async claimForRun(input: { organizationId: string; id: string }) {
+    const existing = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing) {
+      throw new HttpError({
+        code: "NOT_FOUND",
+        message: "Agent execution was not found",
+        statusCode: 404
+      });
+    }
+
+    // Only claim if still QUEUED — prevents double-claiming in race conditions.
+    if (existing.status !== "QUEUED") {
+      return existing;
+    }
+
+    const now = new Date();
+    return this.executions.updateStatus({
+      organizationId: input.organizationId,
+      id: input.id,
+      status: "RUNNING",
+      startedAt: existing.startedAt ?? now,
+      attemptCount: (existing.attemptCount ?? 0) + 1
+    });
+  }
+
+  /**
+   * Mark an execution as FAILED due to timeout.
+   *
+   * Sets failureReason="TIMEOUT" and timedOutAt=now so the dashboard
+   * and API consumers can distinguish timeout failures from logic failures.
+   *
+   * TODO(WORKER-READY): The worker's timeout handler calls this when a
+   * job's deadline elapses. Uses the same DB write path as markFailed().
+   */
+  async markTimedOut(input: { organizationId: string; id: string }) {
+    const existing = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing || isTerminalExecutionStatus(existing.status as AgentExecutionStatus)) {
+      // Already terminal — nothing to do. Idempotent.
+      return existing;
+    }
+
+    const now = new Date();
+    const execution = await this.executions.updateStatus({
+      organizationId: input.organizationId,
+      id: input.id,
+      status: "FAILED",
+      completedAt: now,
+      timedOutAt: now,
+      failureReason: "TIMEOUT"
+    });
+
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: "SYSTEM",
+      actorAgentId: existing.agentId,
+      action: "agent_execution.timed_out",
+      resourceType: "AgentExecution",
+      resourceId: input.id,
+      before: { status: existing.status },
+      after: { status: "FAILED", failureReason: "TIMEOUT", timedOutAt: now.toISOString() }
+    });
+
+    return execution;
+  }
+
+  /**
+   * Mark an execution as FAILED with a structured failure reason.
+   * Used by the runner for unhandled errors (failureReason="RUNNER_ERROR")
+   * and governance blocks (failureReason="POLICY_BLOCKED").
+   *
+   * TODO(WORKER-READY): The worker calls this when the agent throws an
+   * unrecoverable error. "RUNNER_ERROR" failures are eligible for retry
+   * (see markRetryable / listRetryable).
+   */
+  async markFailed(input: {
+    organizationId: string;
+    id: string;
+    failureReason: "RUNNER_ERROR" | "POLICY_BLOCKED" | "TIMEOUT";
+    errorMessage?: string;
+  }) {
+    const existing = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing || isTerminalExecutionStatus(existing.status as AgentExecutionStatus)) {
+      return existing;
+    }
+
+    const now = new Date();
+    const execution = await this.executions.updateStatus({
+      organizationId: input.organizationId,
+      id: input.id,
+      status: "FAILED",
+      completedAt: now,
+      failureReason: input.failureReason,
+      output: input.errorMessage ? { error: input.errorMessage } : undefined
+    });
+
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: "SYSTEM",
+      actorAgentId: existing.agentId,
+      action: "agent_execution.runner_failed",
+      resourceType: "AgentExecution",
+      resourceId: input.id,
+      before: { status: existing.status },
+      after: {
+        status: "FAILED",
+        failureReason: input.failureReason,
+        errorMessage: input.errorMessage ?? null
+      }
+    });
+
+    return execution;
+  }
+
+  /**
+   * Re-queue a FAILED execution for another attempt if attemptCount < maxAttempts.
+   *
+   * TODO(WORKER-READY): The worker retry scheduler calls this to reset
+   * eligible executions back to QUEUED so they are picked up again.
+   * Returns null if the execution has exhausted its attempts.
+   */
+  async markRetryable(input: { organizationId: string; id: string }) {
+    const existing = await this.executions.findById({
+      organizationId: input.organizationId,
+      id: input.id
+    });
+    if (!existing) return null;
+
+    // Only retry RUNNER_ERROR failures — not TIMEOUT or POLICY_BLOCKED
+    if (existing.status !== "FAILED" || existing.failureReason !== "RUNNER_ERROR") {
+      return null;
+    }
+
+    const attemptCount = existing.attemptCount ?? 0;
+    const maxAttempts = existing.maxAttempts ?? 1;
+
+    if (attemptCount >= maxAttempts) {
+      // Exhausted all attempts — not retryable.
+      return null;
+    }
+
+    // Reset to QUEUED. attemptCount is left intact (incremented again on next claim).
+    return this.executions.updateStatus({
+      organizationId: input.organizationId,
+      id: input.id,
+      status: "QUEUED",
+      failureReason: undefined,
+      completedAt: undefined
+    });
+  }
+
+  /**
+   * List executions that have failed with a retryable error and still have
+   * attempts remaining.
+   *
+   * TODO(WORKER-READY): The worker's retry cron calls this to get a batch of
+   * work to re-enqueue. Currently exposed but not called in production — here
+   * to define the API so the worker can import and use it without changes.
+   */
+  async listRetryable(input: { organizationId: string }) {
+    const candidates = await this.executions.listRetryable(input);
+    // Filter in application code: attemptCount < maxAttempts
+    // TODO(WORKER-READY): Push this filter to SQL once worker is extracted.
+    return candidates.filter(
+      (e) => (e.attemptCount ?? 0) < (e.maxAttempts ?? 1)
+    );
+  }
+
+  // ─── Shared (used by both layers) ────────────────────────────────────────────
 
   async transition(input: {
     organizationId: string;

@@ -42,6 +42,12 @@ export class AgentExecutionRepository {
     });
   }
 
+  /**
+   * Update execution status along with optional worker-readiness metadata.
+   *
+   * TODO(WORKER-READY): The worker process calls this (via the service) to
+   * persist state transitions, including timeout/retry fields.
+   */
   async updateStatus(input: {
     organizationId: string;
     id: string;
@@ -49,6 +55,10 @@ export class AgentExecutionRepository {
     output?: Prisma.InputJsonValue;
     startedAt?: Date;
     completedAt?: Date;
+    // --- Worker-readiness fields ---
+    attemptCount?: number;
+    timedOutAt?: Date;
+    failureReason?: string;
   }) {
     await this.prisma.agentExecution.updateMany({
       where: {
@@ -59,11 +69,39 @@ export class AgentExecutionRepository {
         status: input.status,
         output: input.output,
         startedAt: input.startedAt,
-        completedAt: input.completedAt
+        completedAt: input.completedAt,
+        // Worker-readiness fields — only written when explicitly provided
+        ...(input.attemptCount !== undefined && { attemptCount: input.attemptCount }),
+        ...(input.timedOutAt !== undefined && { timedOutAt: input.timedOutAt }),
+        ...(input.failureReason !== undefined && { failureReason: input.failureReason }),
       }
     });
 
     return this.findById({ organizationId: input.organizationId, id: input.id });
+  }
+
+  /**
+   * List executions that have failed but still have attempts remaining.
+   * Used by the future worker to schedule retries.
+   *
+   * TODO(WORKER-READY): The worker calls this on startup (or via cron) to
+   * re-enqueue retryable executions. Currently unused — here to define the API.
+   */
+  listRetryable(input: { organizationId: string }) {
+    return this.prisma.agentExecution.findMany({
+      where: {
+        organizationId: input.organizationId,
+        status: "FAILED",
+        // Only retry if there are attempts remaining and the failure is retryable
+        // (i.e., not timed-out or policy-blocked — those need human review)
+        failureReason: "RUNNER_ERROR",
+        // attemptCount < maxAttempts — Prisma supports column comparisons via raw SQL,
+        // but for simplicity the service layer filters after fetch for now.
+        // TODO(WORKER-READY): Replace with a raw WHERE clause for efficiency at scale.
+      },
+      orderBy: { createdAt: "asc" },
+      take: 100
+    });
   }
 
   findTraceById(input: { organizationId: string; id: string }) {

@@ -264,6 +264,16 @@ model AgentExecution {
   input           Json                 @default("{}")
   output          Json?
   riskScore       Int                  @default(0)
+  // --- Worker-readiness fields ---
+  // TODO(WORKER-READY): These fields are consumed by the execution runner.
+  // When moving execution to apps/worker, the worker reads these fields from
+  // QUEUED records and enforces maxAttempts / timeoutMs limits.
+  maxAttempts     Int                  @default(1)   // Max times this execution may be attempted
+  attemptCount    Int                  @default(0)   // How many times it has been claimed by a runner
+  timeoutMs       Int?                               // Optional per-execution timeout in milliseconds
+  timedOutAt      DateTime?                          // Set when status=FAILED due to timeout
+  failureReason   String?                            // "TIMEOUT" | "POLICY_BLOCKED" | "RUNNER_ERROR" | null
+  // --- Timestamps ---
   startedAt       DateTime?
   completedAt     DateTime?
   createdAt       DateTime             @default(now())

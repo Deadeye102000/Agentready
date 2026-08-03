@@ -29,7 +29,11 @@ export const createAgentExecutionSchema = z.object({
   contractId: z.string().min(1).optional(),
   objective: z.string().min(1),
   input: jsonRecordSchema.default({}),
-  riskScore: z.number().int().min(0).max(100).default(0)
+  riskScore: z.number().int().min(0).max(100).default(0),
+  // Worker-readiness: callers may configure timeout and max retry attempts.
+  // TODO(WORKER-READY): The execution runner reads these values when claiming work.
+  timeoutMs: z.number().int().min(1000).optional(),       // e.g. 30_000 for 30 s
+  maxAttempts: z.number().int().min(1).max(10).default(1) // default: one attempt only
 });
 
 export const createToolCallTraceSchema = z.object({
