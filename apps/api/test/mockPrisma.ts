@@ -637,3 +637,12 @@ mockPrisma.evalRun.findMany = async (args: any) => {
     };
   });
 };
+
+mockPrisma.organizationMember = {
+  findFirst: async (args: any) => {
+    const where = args.where || {};
+    return mockStore.memberships.find(
+      (m) => m.userId === where.userId && m.organizationId === where.organizationId
+    ) || null;
+  }
+};

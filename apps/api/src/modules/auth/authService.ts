@@ -8,6 +8,7 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 export type AuthContext = {
   userId: string;
   organizationId: string;
+  role?: string;
 };
 
 export class AuthService {
