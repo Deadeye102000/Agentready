@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildServer } from "../src/server.js";
 import { mockStore, resetMockStore } from "./mockPrisma.js";
@@ -16,6 +16,13 @@ describe("Execution Runner Background Worker Integration Tests", () => {
     app = await buildServer();
     auditService = new AuditService(new AuditRepository(app.prisma as any));
     runner = new ExecutionRunnerService(app.prisma as any, auditService);
+    (runner as any).isRunning = true;
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
   });
 
   it("poller claims QUEUED executions, transitions to RUNNING, and logs SYSTEM audit", async () => {

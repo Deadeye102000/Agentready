@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/**/*.test.ts"
+    "test": "NODE_ENV=test node --import tsx --test test/**/*.test.ts"
   },
   "dependencies": {
     "@agentready/agent-contracts": "workspace:*",

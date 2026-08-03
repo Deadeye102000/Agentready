@@ -14,6 +14,7 @@ import {
   registerAuthContext
 } from "../../modules/auth/authPlugin.js";
 import { registerAuthRoutes } from "../../modules/auth/authRoutes.js";
+import { registerApiKeyRoutes } from "../../modules/api-keys/apiKey.routes.js";
 
 const validationTestSchema = z.object({
   name: z.string().min(1)
@@ -44,5 +45,6 @@ export async function registerV1Routes(app: FastifyInstance) {
     await registerGovernanceRoutes(protectedApp);
     await registerObservabilityRoutes(protectedApp);
     await registerAuditRoutes(protectedApp);
+    await registerApiKeyRoutes(protectedApp);
   });
 }

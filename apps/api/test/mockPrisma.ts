@@ -17,6 +17,7 @@ export interface MockStore {
   approvalGates: any[];
   approvalRequests: any[];
   evalCases: any[];
+  apiKeys: any[];
 }
 
 export const mockStore: MockStore = {
@@ -35,6 +36,7 @@ export const mockStore: MockStore = {
   approvalGates: [],
   approvalRequests: [],
   evalCases: [],
+  apiKeys: [],
 };
 
 export function resetMockStore() {
@@ -53,6 +55,7 @@ export function resetMockStore() {
   mockStore.approvalGates = [];
   mockStore.approvalRequests = [];
   mockStore.evalCases = [];
+  mockStore.apiKeys = [];
 }
 
 // Helper to generate IDs
@@ -160,6 +163,26 @@ mockPrisma.agentIdentity.count = async (args: any) => {
   return mockStore.agentIdentities.filter(
     (a) => (!where.id || a.id === where.id) && (!where.organizationId || a.organizationId === where.organizationId)
   ).length;
+};
+
+mockPrisma.agentIdentity.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.agentIdentities.find(
+    (a) => (!where.id || a.id === where.id) && (!where.organizationId || a.organizationId === where.organizationId)
+  ) || null;
+};
+
+mockPrisma.agentIdentity.create = async (args: any) => {
+  const data = args.data;
+  const item = {
+    id: data.id || Math.random().toString(36).slice(2, 12),
+    organizationId: data.organizationId,
+    name: data.name,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+  mockStore.agentIdentities.push(item);
+  return item;
 };
 
 mockPrisma.taskContract.count = async (args: any) => {
@@ -644,5 +667,69 @@ mockPrisma.organizationMember = {
     return mockStore.memberships.find(
       (m) => m.userId === where.userId && m.organizationId === where.organizationId
     ) || null;
+  }
+};
+
+mockPrisma.apiKey = {
+  create: async (args: any) => {
+    const data = args.data;
+    const item = {
+      id: Math.random().toString(36).substring(2, 15),
+      organizationId: data.organizationId,
+      agentId: data.agentId,
+      name: data.name,
+      keyPrefix: data.keyPrefix,
+      keyHash: data.keyHash,
+      scopes: data.scopes || [],
+      expiresAt: data.expiresAt || null,
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    mockStore.apiKeys.push(item);
+    return item;
+  },
+  findFirst: async (args: any) => {
+    const where = args.where || {};
+    return mockStore.apiKeys.find((k) => {
+      if (where.keyHash && k.keyHash !== where.keyHash) return false;
+      if (where.id && k.id !== where.id) return false;
+      if (where.organizationId && k.organizationId !== where.organizationId) return false;
+      if (where.revokedAt === null && k.revokedAt !== null) return false;
+      return true;
+    }) || null;
+  },
+  findMany: async (args: any) => {
+    const where = args.where || {};
+    const select = args.select;
+    const matches = mockStore.apiKeys.filter((k) => {
+      if (where.organizationId && k.organizationId !== where.organizationId) return false;
+      return true;
+    });
+
+    if (select) {
+      return matches.map((k) => {
+        const res: any = {};
+        for (const key of Object.keys(select)) {
+          if (select[key]) {
+            res[key] = k[key];
+          }
+        }
+        return res;
+      });
+    }
+
+    return matches;
+  },
+  update: async (args: any) => {
+    const where = args.where || {};
+    const data = args.data || {};
+    const item = mockStore.apiKeys.find((k) => k.id === where.id);
+    if (!item) throw new Error("Key not found");
+    if (data.revokedAt !== undefined) item.revokedAt = data.revokedAt;
+    if (data.lastUsedAt !== undefined) item.lastUsedAt = data.lastUsedAt;
+    item.updatedAt = new Date();
+    return item;
   }
 };

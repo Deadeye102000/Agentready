@@ -1,0 +1,178 @@
+import { describe, it, beforeEach, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { buildServer } from "../src/server.js";
+import { mockStore, resetMockStore } from "./mockPrisma.js";
+import { signSession } from "@agentready/auth";
+import { env } from "../src/lib/env.js";
+import { requireMachineAuth } from "../src/modules/auth/machineAuthPlugin.js";
+
+describe("API Key Management & Machine Auth Integration Tests", () => {
+  let app: any;
+
+  beforeEach(async () => {
+    resetMockStore();
+    app = await buildServer();
+
+    // Register a dummy route protected by requireMachineAuth to verify machine auth integration
+    app.get("/_test/machine-auth", {
+      preHandler: [requireMachineAuth]
+    }, async (request: any) => {
+      return {
+        ok: true,
+        authContext: request.authContext
+      };
+    });
+
+    // Seed organization, user, and agent
+    const org = { id: "org-1", name: "Test Org", slug: "test-org", createdAt: new Date(), updatedAt: new Date() };
+    mockStore.organizations.push(org);
+
+    const user = { id: "user-1", email: "user@example.com", name: "User", passwordHash: "hash", createdAt: new Date(), updatedAt: new Date() };
+    mockStore.users.push(user);
+
+    mockStore.memberships.push({
+      id: "mem-1",
+      userId: "user-1",
+      organizationId: "org-1",
+      role: "ADMIN",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const agent = { id: "agent-1", organizationId: "org-1", name: "Agent 1", createdAt: new Date(), updatedAt: new Date() };
+    mockStore.agentIdentities.push(agent);
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
+  });
+
+  const getSessionCookie = (userId: string, organizationId: string) => {
+    const token = signSession(
+      { userId, organizationId, exp: Math.floor(Date.now() / 1000) + 3600 },
+      env.AUTH_SESSION_SECRET
+    );
+    return `agentready_session=${token}`;
+  };
+
+  it("successfully creates, lists, and revokes API keys for OWNER/ADMIN", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // 1. Create API Key
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: { name: "Agent Key" }
+    });
+
+    assert.equal(createRes.statusCode, 200);
+    const createBody = JSON.parse(createRes.body);
+    assert.ok(createBody.rawKey);
+    assert.match(createBody.rawKey, /^ar_live_/);
+    assert.equal(createBody.apiKeyRecord.name, "Agent Key");
+    assert.ok(createBody.apiKeyRecord.id);
+
+    const keyId = createBody.apiKeyRecord.id;
+
+    // 2. List API Keys
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/api-keys",
+      headers: { cookie }
+    });
+
+    assert.equal(listRes.statusCode, 200);
+    const listBody = JSON.parse(listRes.body);
+    assert.equal(listBody.length, 1);
+    assert.equal(listBody[0].id, keyId);
+    assert.equal(listBody[0].name, "Agent Key");
+    assert.ok(listBody[0].keyPrefix);
+    // Secure hash secrets must be omitted from listing
+    assert.equal(listBody[0].rawKey, undefined);
+    assert.equal(listBody[0].keyHash, undefined);
+
+    // 3. Revoke API Key
+    const deleteRes = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/api-keys/${keyId}`,
+      headers: { cookie }
+    });
+
+    assert.equal(deleteRes.statusCode, 200);
+    const deleteBody = JSON.parse(deleteRes.body);
+    assert.ok(deleteBody.revokedAt);
+  });
+
+  it("authenticates and scopes request using valid Bearer token", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // Create a key
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: { name: "Machine Key" }
+    });
+    const { rawKey } = JSON.parse(createRes.body);
+
+    // Call dummy route with valid Bearer token
+    const testRes = await app.inject({
+      method: "GET",
+      url: "/_test/machine-auth",
+      headers: { authorization: `Bearer ${rawKey}` }
+    });
+
+    assert.equal(testRes.statusCode, 200);
+    const testBody = JSON.parse(testRes.body);
+    assert.equal(testBody.ok, true);
+    assert.equal(testBody.authContext.userId, "machine-actor");
+    assert.equal(testBody.authContext.organizationId, "org-1");
+    assert.equal(testBody.authContext.role, "AGENT");
+  });
+
+  it("denies access with missing, invalid or revoked Bearer token", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // Create a key
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: { name: "Revoked Key" }
+    });
+    const { rawKey, apiKeyRecord } = JSON.parse(createRes.body);
+
+    // Revoke the key
+    await app.inject({
+      method: "DELETE",
+      url: `/api/v1/api-keys/${apiKeyRecord.id}`,
+      headers: { cookie }
+    });
+
+    // 1. Missing Authorization header
+    const missingRes = await app.inject({
+      method: "GET",
+      url: "/_test/machine-auth"
+    });
+    assert.equal(missingRes.statusCode, 401);
+
+    // 2. Invalid Token
+    const invalidRes = await app.inject({
+      method: "GET",
+      url: "/_test/machine-auth",
+      headers: { authorization: "Bearer ar_live_invalidkeyhere" }
+    });
+    assert.equal(invalidRes.statusCode, 401);
+
+    // 3. Revoked Token
+    const revokedRes = await app.inject({
+      method: "GET",
+      url: "/_test/machine-auth",
+      headers: { authorization: `Bearer ${rawKey}` }
+    });
+    assert.equal(revokedRes.statusCode, 401);
+  });
+});

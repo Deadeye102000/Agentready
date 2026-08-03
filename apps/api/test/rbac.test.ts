@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildServer } from "../src/server.js";
 import { mockStore, resetMockStore } from "./mockPrisma.js";
@@ -22,6 +22,12 @@ describe("Role-Based Access Control (RBAC) Integration Tests", () => {
     // Seed agent
     const agent = { id: "agent-1", organizationId: "org-1", name: "Agent 1", createdAt: new Date(), updatedAt: new Date() };
     mockStore.agentIdentities.push(agent);
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
   });
 
   const getSessionCookie = (userId: string, organizationId: string) => {

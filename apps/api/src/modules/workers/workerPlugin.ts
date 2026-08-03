@@ -18,6 +18,13 @@ export async function workerPlugin(app: FastifyInstance) {
 
   // Hook into Fastify server lifecycle hooks
   app.addHook("onReady", async () => {
+    if (
+      process.env.NODE_ENV === "test" ||
+      process.env.NODE_TEST_CONTEXT !== undefined ||
+      process.execArgv.includes("--test")
+    ) {
+      return;
+    }
     app.log.info("[Worker Plugin] Starting background execution runner...");
     runner.start();
   });
