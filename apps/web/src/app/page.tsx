@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Navbar } from "../components/Navbar";
+import { SandboxController } from "../components/SandboxController";
 import {
   fetchDashboardData,
   fetchRegressionData,
@@ -65,6 +66,8 @@ export default async function HomePage() {
           message={dashboardRes.error || regressionRes.error || ""}
           isFallback={dashboardRes.isFallback || regressionRes.isFallback}
         />
+
+        <SandboxController />
 
         {/* 7 Required Overview Dashboard KPI Cards */}
         <section className="metricGrid" aria-label="Harness KPI Metrics">

@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import { Navbar } from "../../../components/Navbar";
 import { fetchExecutionDetail, formatPercent, statusClass } from "../../../lib/api";
