@@ -23,6 +23,7 @@ const envSchema = z.object({
     .url()
     .default("postgresql://agentready:agentready@localhost:5432/agentready?schema=public"),
   AUTH_SESSION_SECRET: z.string().min(32).default("development-auth-session-secret-change-me"),
+  SENTRY_DSN: z.string().url().optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info")
 });
 

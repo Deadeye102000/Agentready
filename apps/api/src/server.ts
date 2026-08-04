@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import * as Sentry from "@sentry/node";
 import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { prisma } from "./lib/prisma.js";
@@ -9,17 +10,24 @@ import { env } from "./lib/env.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerV1Routes } from "./routes/v1/index.js";
 import { workerPlugin } from "./modules/workers/workerPlugin.js";
+import { loggerConfig } from "./utils/logger.js";
 
 export async function buildServer() {
+  if (env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: env.SENTRY_DSN,
+      environment: env.NODE_ENV,
+      tracesSampleRate: env.NODE_ENV === "production" ? 0.1 : 1.0
+    });
+  }
+
   const app = Fastify({
     bodyLimit: env.API_BODY_LIMIT_BYTES,
     genReqId: (request) => {
       const requestId = request.headers["x-request-id"];
       return Array.isArray(requestId) ? requestId[0] : requestId ?? randomUUID();
     },
-    logger: {
-      level: env.LOG_LEVEL
-    }
+    logger: loggerConfig
   });
 
   app.decorate("prisma", prisma);

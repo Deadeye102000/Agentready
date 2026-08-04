@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import * as Sentry from "@sentry/node";
 import { ZodError } from "zod";
 import type { ErrorCode } from "./errorCodes.js";
 import { HttpError } from "./httpError.js";
@@ -31,6 +32,14 @@ export function registerErrorHandlers(app: FastifyInstance) {
 
     if (mapped.statusCode >= 500) {
       request.log.error({ err: error, requestId: request.id }, "Unhandled API error");
+      
+      Sentry.captureException(error, {
+        tags: {
+          requestId: request.id,
+          organizationId: request.authContext?.organizationId,
+          userId: request.authContext?.userId
+        }
+      });
     } else {
       request.log.warn({ err: error, requestId: request.id }, "Handled API error");
     }

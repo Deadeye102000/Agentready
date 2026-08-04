@@ -139,6 +139,22 @@ graph TD
   - If any matching tool is `BLOCKED` by organization policy, the start request is rejected with a `403 Forbidden` response.
 - **Audit Trails**: Custom MCP metadata is forwarded and recorded in the audit logs.
 
+### M. Async Background Runner
+- **Lifecycle Engine**: Polling loop picking up `QUEUED` executions and transitioning them to `RUNNING` using an atomic DB claim.
+- **Fastify Lifecycle Hooks**: Registered via Fastify server onReady and onClose hooks with comprehensive test suite environment safety toggles.
+
+### N. Role-Based Access Control (RBAC)
+- **Role Scopes**: Enforces server-side permissions based on `OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER` roles using cached Context fields.
+- **Route Gating**: Gates feature flags writes to `OWNER`, `ADMIN` and approval request reviews to `OWNER`, `ADMIN`, `APPROVER`.
+
+### O. API Key & Machine Authentication
+- **Secure Secret Storage**: Key secrets are generated cryptographically and stored exclusively as SHA-256 hashes (`keyHash`).
+- **Bearer Token Auth**: Hook `requireMachineAuth` parses Bearer headers and populates Request Auth Context with `AGENT` role.
+
+### P. Frontend Auth UI
+- **Registration & Login Screen**: Center-focused responsive cards styled with modern dark gradients.
+- **Fetch Credentials**: Enforces `credentials: 'include'` on all client requests to preserve HttpOnly session cookie flows.
+
 ---
 
 ## 3. API Endpoints Reference
@@ -175,6 +191,9 @@ graph TD
 | Eval Cases | POST | `/api/v1/eval-suites/run` | Run entire eval suite |
 | Observability | GET | `/api/v1/observability/dashboard` | Aggregated dashboard metrics |
 | Audit | GET | `/api/v1/audit-logs` | List audit logs |
+| API Keys | POST | `/api/v1/api-keys` | Create API key (OWNER/ADMIN) |
+| API Keys | GET | `/api/v1/api-keys` | List API keys (OWNER/ADMIN) |
+| API Keys | DELETE | `/api/v1/api-keys/:id` | Revoke API key (OWNER/ADMIN) |
 
 ---
 
@@ -244,7 +263,7 @@ pnpm test:api      # API integration tests only
 pnpm test:web      # Frontend smoke tests only
 ```
 
-### Current coverage: 66 tests, 0 failures
+### Current coverage: 76 tests, 0 failures
 
 | Suite | Tests | Location | What it covers |
 |:---|:---|:---|:---|
@@ -252,11 +271,14 @@ pnpm test:web      # Frontend smoke tests only
 | Execution State Machine | 6 | `apps/api/test/execution-state-machine.test.ts` | Valid/invalid transitions, terminal state protection |
 | Tenancy | 3 | `apps/api/test/tenancy.test.ts` | Cross-org isolation, 403/404 boundary enforcement |
 | Feature Flags | 6 | `apps/api/test/feature-flags.test.ts` | Flag blocking, toggle, audit logs, auto-approval override |
-| Approval Gates | 15 | `apps/api/test/approval-gates.test.ts` | Gate patterns, risk thresholds, approval lifecycle, and execution-start gating checks |
+| Approval Gates | 9 | `apps/api/test/approval-gates.test.ts` | Gate patterns, risk thresholds, approval lifecycle, and execution-start gating checks |
 | Eval Framework | 6 | `apps/api/test/eval-framework.test.ts` | Case creation, scoring, suite runs |
 | Eval Regression | 1 | `apps/api/test/regression.test.ts` | Delta computation, newly passing/failing |
 | **Critical Flows** | **11** | `apps/api/test/critical-flows.test.ts` | End-to-end: register→login→contract→exec→trace→approval→eval |
 | **Frontend Smoke** | **19** | `apps/web/test/smoke.test.ts` | Data contracts, status enums, type shapes, regression math |
+| **Background Worker** | **3** | `apps/api/test/worker.test.ts` | Queued claims, atomic updates claim concurrency, and SYSTEM actor logging |
+| **RBAC Protection** | **4** | `apps/api/test/rbac.test.ts` | Endpoint protection for feature flags, approvals under VIEWER, ADMIN, MEMBER, APPROVER |
+| **API Key & Machine Auth** | **3** | `apps/api/test/api-keys.test.ts` | API Key creation, secure listings, token validation & Bearer header resolution |
 
 ### Critical Flows Test Coverage
 
@@ -277,9 +299,10 @@ The `critical-flows.test.ts` suite exercises 8 end-to-end API paths in a single 
 
 ## 7. Upcoming Roadmap
 
-- [ ] **Frontend Auth Screens**: Build `/register` and `/login` UI; wire session cookies to Next.js fetch layer.
-- [ ] **Role-Based Access Controls (RBAC)**: Validate member roles (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`) on sensitive endpoints.
-- [ ] **Execution Background Runner**: Poll `QUEUED` executions and transition to `RUNNING` via an isolated worker.
+- [x] **Frontend Auth Screens**: Build `/register` and `/login` UI; wire session cookies to Next.js fetch layer.
+- [x] **Role-Based Access Controls (RBAC)**: Validate member roles (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`) on sensitive endpoints.
+- [x] **Execution Background Runner**: Poll `QUEUED` executions and transition to `RUNNING` via an isolated worker.
+- [x] **API Key & Machine Auth**: Add Bearer header token validation for automated agent execution.
 - [ ] **Typed API Response Contracts**: Share response types between `apps/api` and `apps/web` via `packages/shared`.
 - [ ] **Audit Log UI**: Frontend page for browsing and filtering audit log entries.
 - [ ] **Password Reset / Invite Flow**: Email-based credential recovery and team invites.
