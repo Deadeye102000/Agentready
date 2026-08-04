@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 export function SandboxController() {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
+  
   const [finOpsState, setFinOpsState] = useState<{
     executionId?: string;
     status?: string;
@@ -17,6 +18,15 @@ export function SandboxController() {
     blockedTool?: string;
     policyReason?: string;
     auditLog?: any;
+    mocked?: boolean;
+  } | null>(null);
+
+  const [evalState, setEvalState] = useState<{
+    status?: string;
+    score?: number;
+    toolCallingCorrectness?: string;
+    toolCallingDelta?: string;
+    hallucinationRate?: string;
     mocked?: boolean;
   } | null>(null);
 
@@ -32,6 +42,7 @@ export function SandboxController() {
     setLoading("FinOpsAgent");
     setFinOpsState(null);
     setRogueState(null);
+    setEvalState(null);
     addLog("system", "Starting FinOps Agent scenario...");
     addLog("sent", "POST /api/sandbox { agentType: 'FinOpsAgent', action: 'trigger' }");
     
@@ -100,6 +111,7 @@ export function SandboxController() {
     setLoading("RogueAgent");
     setFinOpsState(null);
     setRogueState(null);
+    setEvalState(null);
     addLog("system", "Starting Rogue Agent scenario (Simulating Prompt Injection)...");
     addLog("sent", "POST /api/sandbox { agentType: 'RogueAgent', action: 'trigger' }");
     
@@ -132,24 +144,37 @@ export function SandboxController() {
     setLoading("EvalAgent");
     setFinOpsState(null);
     setRogueState(null);
-    addLog("system", "Starting Eval Agent scenario...");
-    addLog("sent", "POST /api/sandbox { agentType: 'EvalAgent', action: 'trigger' }");
+    setEvalState(null);
+    addLog("system", "Starting CI/CD Evaluation Agent scenario...");
+    addLog("sent", "POST /api/sandbox { agentType: 'EvalAgent', action: 'trigger', payload: { action: 'run_eval_framework', targetAgent: 'sales_agent_v2', compareAgainst: 'baseline_v1' } }");
     
     try {
       const res = await fetch("/api/sandbox", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentType: "EvalAgent", action: "trigger" })
+        body: JSON.stringify({
+          agentType: "EvalAgent",
+          action: "trigger",
+          payload: {
+            action: "run_eval_framework",
+            targetAgent: "sales_agent_v2",
+            compareAgainst: "baseline_v1"
+          }
+        })
       });
       const data = await res.json();
       
       addLog("received", `HTTP ${res.status}: ` + JSON.stringify(data));
-      if (data.regression) {
-        addLog(
-          "system",
-          `📊 Compliance test suite runs complete. Score: ${Math.round(data.score * 100)}%. Regression Delta: ${data.regression.delta >= 0 ? "+" : ""}${Math.round(data.regression.delta * 100)}%`
-        );
-      }
+      addLog("system", `📊 Compliance checks complete. Score: ${data.toolCallingCorrectness}. Hallucination Rate: ${data.hallucinationRate}. State: ${data.status}.`);
+
+      setEvalState({
+        status: data.status,
+        score: data.score,
+        toolCallingCorrectness: data.toolCallingCorrectness,
+        toolCallingDelta: data.toolCallingDelta,
+        hallucinationRate: data.hallucinationRate,
+        mocked: data.mocked
+      });
       router.refresh();
     } catch (err: any) {
       addLog("system", `❌ Error running scenario: ${err.message}`);
@@ -173,6 +198,7 @@ export function SandboxController() {
             setConsoleLogs([{ type: "system", text: "Console logs cleared." }]);
             setFinOpsState(null);
             setRogueState(null);
+            setEvalState(null);
           }}
           className="sandboxClearBtn"
         >
@@ -241,6 +267,32 @@ export function SandboxController() {
                 <span className="alertText" style={{ marginTop: "4px", display: "block" }}>
                   <strong>Outcome:</strong> Tool <code>drop_production_db</code> execution blocked by policy! State machine transitioned to <strong>FAILED</strong>.
                 </span>
+              </div>
+            </div>
+          )}
+
+          {evalState && (
+            <div className="sandboxEvalPanel">
+              <div className="alertIcon">📊</div>
+              <div className="alertBody" style={{ width: "100%" }}>
+                <span className="alertTitle" style={{ color: "#065f46" }}>CI/CD Evaluation Report</span>
+                <span className="alertText" style={{ color: "#047857" }}>
+                  <strong>System Prompt:</strong> "You are the CI/CD Evaluation Agent. Run the standard test harness against the Sales Agent v2.0."
+                </span>
+                <div className="evalMetricsGrid">
+                  <div className="evalMetricSubCard">
+                    <span className="evalMetricSubLabel">Tool Correctness</span>
+                    <span className="evalMetricSubValue">{evalState.toolCallingCorrectness} <span style={{ fontSize: "0.7rem", color: "#059669" }}>({evalState.toolCallingDelta})</span></span>
+                  </div>
+                  <div className="evalMetricSubCard">
+                    <span className="evalMetricSubLabel">Hallucinations</span>
+                    <span className="evalMetricSubValue">{evalState.hallucinationRate}</span>
+                  </div>
+                  <div className="evalMetricSubCard">
+                    <span className="evalMetricSubLabel">Status</span>
+                    <span className="pill good">{evalState.status}</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -389,6 +441,15 @@ export function SandboxController() {
           margin-top: 8px;
           animation: pulseBorderRed 2s infinite alternate;
         }
+        .sandboxEvalPanel {
+          display: flex;
+          gap: 12px;
+          background: #f0fdf4;
+          border: 1px solid #a7f3d0;
+          border-radius: 8px;
+          padding: 12px;
+          margin-top: 8px;
+        }
         @keyframes pulseBorder {
           from { border-color: #fef3c7; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
           to { border-color: #f59e0b; box-shadow: 0 0 6px 1px rgba(251, 191, 36, 0.15); }
@@ -415,6 +476,33 @@ export function SandboxController() {
           color: #7f1d1d;
           line-height: 1.4;
         }
+        .evalMetricsGrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 8px;
+          margin-top: 8px;
+          width: 100%;
+        }
+        .evalMetricSubCard {
+          background: #ffffff;
+          border: 1px solid #d1fae5;
+          border-radius: 6px;
+          padding: 6px 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .evalMetricSubLabel {
+          font-size: 0.65rem;
+          color: #065f46;
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+        .evalMetricSubValue {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: #047857;
+        }
         .sandboxApproveBtn {
           background: #d97706;
           color: #ffffff;
@@ -437,7 +525,7 @@ export function SandboxController() {
           flex-direction: column;
           overflow: hidden;
           border: 1px solid #1e293b;
-          height: 220px;
+          height: 240px;
         }
         .consoleHeader {
           background: #1e293b;
