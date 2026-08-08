@@ -67,13 +67,12 @@ As AI agents transition from passive chatbots to active software operators execu
 - **Machine Authentication**: SHA-256 hashed API Keys for Bearer token authorization (`AGENT` role).
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions for `OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, and `APPROVER` roles.
 
-### 💻 Modern Web Dashboard & Sandbox Controller
+### 🔌 External Agent Integration
+AgentReady is designed to be called by independently-built AI agents (e.g. LangGraph-based) over its public REST API using Bearer-token machine authentication (see API Keys section). It provides the governed integration surface and observation layer for external agents, rather than bundling pre-packaged agent implementations within this repository.
+
+### 💻 Modern Web Dashboard
 - Next.js 15 responsive UI styled with modern dark gradients and Tailwind CSS.
 - **Overview KPI Panel**: Metrics for active executions, pass rates, pending approvals, and active flags.
-- **Interactive Sandbox Controller**: Interactive agent testing environment with pre-built scenarios:
-  - 💳 **FinOps Agent**: High-value refund simulation ($10,000) triggering human approval intervention.
-  - 🕵️ **Rogue Agent**: Data exfiltration attempt intercepted and blocked by governance rules.
-  - 🧪 **Eval Runner**: Autonomous suite execution and regression breakdown.
 - **Interactive Approval Queue (`/approval-queue`)**: Inline authorization modals with rejection note requirements.
 
 ---
@@ -90,7 +89,6 @@ graph TD
     apps/api --> packages/auth
     apps/api --> packages/agent-contracts
     apps/mcp-server[apps/mcp-server<br>Model Context Protocol Server] --> packages/shared
-    apps/agents[apps/agents<br>LangGraph Demo Agents] --> packages/shared
     
     packages/db --> Prisma[Prisma ORM & PostgreSQL]
     packages/auth --> Crypto[scrypt & HMAC Crypto]
@@ -104,8 +102,7 @@ Agentready/
 ├── apps/
 │   ├── api/             # Fastify REST API backend (Port 3001)
 │   ├── web/             # Next.js 15 frontend dashboard (Port 3000)
-│   ├── mcp-server/      # Model Context Protocol stdio server
-│   └── agents/          # LangGraph reference agent implementations
+│   └── mcp-server/      # Model Context Protocol stdio server
 ├── packages/
 │   ├── db/              # Prisma schema, client generator & database utilities
 │   ├── shared/          # Shared TypeScript interfaces, types & Zod schemas
@@ -210,7 +207,7 @@ erDiagram
 
 1. **Clone the repository and install dependencies**:
    ```bash
-   git clone https://github.com/your-org/agentready.git
+   git clone https://github.com/Deadeye102000/Agentready.git
    cd Agentready
    pnpm install
    ```
@@ -278,18 +275,18 @@ pnpm build
 
 | Test Suite | Tests | Target File | Features Covered |
 |:---|:---:|:---|:---|
-| **Auth Suite** | 5 | [`apps/api/test/auth.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/auth.test.ts) | User registration, login, session validation, cookie issuance |
-| **Execution State Machine** | 6 | [`apps/api/test/execution-state-machine.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/execution-state-machine.test.ts) | Valid/invalid state transitions, terminal status protection |
-| **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
-| **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
-| **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
-| **Eval Framework** | 6 | [`apps/api/test/eval-framework.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs |
-| **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
-| **Critical E2E Flows** | 11 | [`apps/api/test/critical-flows.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/critical-flows.test.ts) | End-to-end flow: Register $\to$ Contract $\to$ Execution $\to$ Trace $\to$ Approval $\to$ Eval |
-| **Frontend Smoke** | 19 | [`apps/web/test/smoke.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math |
-| **Background Worker** | 3 | [`apps/api/test/worker.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, system logging |
-| **RBAC Protection** | 4 | [`apps/api/test/rbac.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`) |
-| **API Keys & Machine Auth** | 3 | [`apps/api/test/api-keys.test.ts`](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage |
+| **Auth Suite** | 5 | [`apps/api/test/auth.test.ts`](apps/api/test/auth.test.ts) | User registration, login, session validation, cookie issuance |
+| **Execution State Machine** | 6 | [`apps/api/test/execution-state-machine.test.ts`](apps/api/test/execution-state-machine.test.ts) | Valid/invalid state transitions, terminal status protection |
+| **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
+| **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
+| **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
+| **Eval Framework** | 6 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs |
+| **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
+| **Critical E2E Flows** | 11 | [`apps/api/test/critical-flows.test.ts`](apps/api/test/critical-flows.test.ts) | End-to-end flow: Register $\to$ Contract $\to$ Execution $\to$ Trace $\to$ Approval $\to$ Eval |
+| **Frontend Smoke** | 19 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math |
+| **Background Worker** | 3 | [`apps/api/test/worker.test.ts`](apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, system logging |
+| **RBAC Protection** | 4 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`) |
+| **API Keys & Machine Auth** | 3 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage |
 
 ---
 
@@ -318,11 +315,11 @@ pnpm build
 
 For deeper architectural details, deployment instructions, and troubleshooting:
 
-1. 📖 **[Implementation Context & Handoff Guide](file:///Users/Deadeye/Desktop/Projects/Agentready/docs/implementation-context.md)** — Detailed module layouts, DB schemas, API endpoints, and test coverage mapping.
-2. 📐 **[Technical Reference Document](file:///Users/Deadeye/Desktop/Projects/Agentready/docs/technical-reference.md)** — Code snippets for Prisma schemas, machine auth hooks, and policy matching rules.
-3. 🚀 **[Production Deployment Guide](file:///Users/Deadeye/Desktop/Projects/Agentready/docs/deployment-ready.md)** — Step-by-step production deployment checklist and environment variables.
-4. 🔧 **[Local Setup & Troubleshooting Guide](file:///Users/Deadeye/Desktop/Projects/Agentready/docs/known-setup-issues.md)** — Solutions for local setup constraints and mock DB setup.
-5. 🎨 **[Product & Design Guide](file:///Users/Deadeye/Desktop/Projects/Agentready/docs/interview-guide.md)** — Conceptual specifications, user personas, and design decisions.
+1. 📖 **[Implementation Context & Handoff Guide](docs/implementation-context.md)** — Detailed module layouts, DB schemas, API endpoints, and test coverage mapping.
+2. 📐 **[Technical Reference Document](docs/technical-reference.md)** — Code snippets for Prisma schemas, machine auth hooks, and policy matching rules.
+3. 🚀 **[Production Deployment Guide](docs/deployment-ready.md)** — Step-by-step production deployment checklist and environment variables.
+4. 🔧 **[Local Setup & Troubleshooting Guide](docs/known-setup-issues.md)** — Solutions for local setup constraints and mock DB setup.
+5. 🎨 **[Product & Design Guide](docs/interview-guide.md)** — Conceptual specifications, user personas, and design decisions.
 
 ---
 

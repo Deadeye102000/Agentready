@@ -6,7 +6,7 @@ This document provides a low-level technical reference of AgentReady's database 
 
 ## 1. Prisma Schema Definition
 
-Verbatim definitions from the database configuration schema ([schema.prisma](file:///Users/Deadeye/Desktop/Projects/Agentready/prisma/schema.prisma)):
+Verbatim definitions from the database configuration schema ([schema.prisma](../prisma/schema.prisma)):
 
 ```prisma
 model AgentIdentity {
@@ -18,150 +18,153 @@ model AgentIdentity {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  apiKeys        ApiKey[]
-  createdTasks   Task[]             @relation("TaskCreatedByAgent")
-  approvalRequests ApprovalRequest[]
-  auditLogs      AuditLog[]
-  idempotencyKeys IdempotencyKey[]   @relation("IdempotencyKeyAgent")
-  taskContracts  TaskContract[]
-  agentExecutions AgentExecution[]
-  toolCallTraces ToolCallTrace[]
-  evalRuns       EvalRun[]
+  executions     AgentExecution[]
+  toolTraces     ToolCallTrace[]
   featureFlags   AgentFeatureFlag[]
+  evalCases      EvalCase[]
+  evalRuns       EvalRun[]
+  apiKeys        ApiKey[]
 
   @@index([organizationId])
 }
 
-model TaskContract {
-  id             String          @id @default(cuid())
-  organizationId String
-  projectId      String
-  taskId         String?
-  agentId        String?
-  name           String
-  version        Int             @default(1)
-  objective      String
-  inputs         Json            @default("{}")
-  successCriteria Json           @default("[]")
-  allowedTools   String[]        @default([])
-  requiredApprovals String[]     @default([])
-  evalSpec       Json            @default("{}")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task           Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  executions     AgentExecution[]
-  evalRuns       EvalRun[]
-  evalCases      EvalCase[]
-
-  @@unique([organizationId, name, version])
-  @@index([organizationId, projectId])
-  @@index([taskId])
-  @@index([agentId])
-}
-
-model AgentExecution {
-  id              String               @id @default(cuid())
-  organizationId  String
-  projectId       String
-  taskId          String?
-  contractId      String?
-  agentId         String
-  status          AgentExecutionStatus @default(QUEUED)
-  objective       String
-  input           Json                 @default("{}")
-  output          Json?
-  riskScore       Int                  @default(0)
-  // --- Worker-readiness fields ---
-  maxAttempts     Int                  @default(1)   // Max times this execution may be attempted
-  attemptCount    Int                  @default(0)   // How many times it has been claimed by a runner
-  timeoutMs       Int?                               // Optional per-execution timeout in milliseconds
-  timedOutAt      DateTime?                          // Set when status=FAILED due to timeout
-  failureReason   String?                            // "TIMEOUT" | "POLICY_BLOCKED" | "RUNNER_ERROR" | null
-  // --- Timestamps ---
-  startedAt       DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project         Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task            Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  contract        TaskContract?        @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  agent           AgentIdentity        @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  toolCallTraces  ToolCallTrace[]
-  evalRuns        EvalRun[]
-
-  @@index([organizationId, status, createdAt])
-  @@index([projectId])
-  @@index([taskId])
-  @@index([contractId])
-  @@index([agentId])
-}
-
-model ToolCallTrace {
-  id             String         @id @default(cuid())
-  organizationId String
-  executionId    String
-  agentId        String
-  toolName       String
-  status         ToolCallStatus @default(PENDING)
-  input          Json           @default("{}")
-  output         Json?
-  error          String?
-  latencyMs      Int?
-  approvalRequestId String?
-  startedAt      DateTime       @default(now())
-  completedAt    DateTime?
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  execution      AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  agent          AgentIdentity  @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  approvalRequest ApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, startedAt])
-  @@index([executionId])
-  @@index([agentId])
-  @@index([toolName, status])
-  @@index([approvalRequestId])
-}
-
-model ApprovalGate {
+model Project {
   id             String           @id @default(cuid())
   organizationId String
-  capability     String
-  mode           ApprovalGateMode @default(REQUIRE_APPROVAL)
-  reason         String?
-  riskLevel      Int              @default(0)
-  enabled        Boolean          @default(true)
+  name           String
+  description    String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks          Task[]
+  executions     AgentExecution[]
+  evalRuns       EvalRun[]
 
-  @@unique([organizationId, capability])
-  @@index([organizationId, mode])
+  @@index([organizationId])
+}
+
+model Task {
+  id             String           @id @default(cuid())
+  organizationId String
+  projectId      String
+  title          String
+  description    String?
+  status         String           @default("OPEN")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions     AgentExecution[]
+
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+model TaskContract {
+  id               String           @id @default(cuid())
+  organizationId   String
+  projectId        String
+  taskId           String?
+  agentId          String?
+  name             String
+  version          Int              @default(1)
+  objective        String
+  inputs           Json             @default("{}")
+  successCriteria  Json             @default("[]")
+  allowedTools     Json             @default("[]")
+  requiredApprovals Json            @default("[]")
+  evalSpec         Json             @default("{}")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executions       AgentExecution[]
+  evalCases        EvalCase[]
+  evalRuns         EvalRun[]
+
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+model AgentExecution {
+  id                  String            @id @default(cuid())
+  organizationId      String
+  projectId           String
+  agentId             String
+  taskId              String?
+  contractId          String?
+  status              String            @default("QUEUED")
+  objective           String
+  input               Json              @default("{}")
+  output              Json?
+  error               String?
+  riskScore           Int               @default(0)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  timeoutMs           Int?
+  maxAttempts         Int               @default(1)
+  attemptCount        Int               @default(0)
+  metadata            Json?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent               AgentIdentity     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  task                Task?             @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  contract            TaskContract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  toolCallTraces      ToolCallTrace[]
+  approvalRequests    ApprovalRequest[]
+  evalRuns            EvalRun[]
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([agentId])
+  @@index([status])
+}
+
+model ToolCallTrace {
+  id                String            @id @default(cuid())
+  organizationId    String
+  executionId       String
+  agentId           String
+  toolName          String
+  status            String            @default("PENDING")
+  input             Json              @default("{}")
+  output            Json?
+  error             String?
+  latencyMs         Int?
+  approvalRequestId String?
+  createdAt         DateTime          @default(now())
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution         AgentExecution    @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  agent             AgentIdentity     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  approvalRequest   ApprovalRequest?  @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([executionId])
+  @@index([agentId])
+  @@index([status])
 }
 
 model ApprovalRequest {
-  id              String         @id @default(cuid())
-  organizationId  String
-  agentId         String
-  requestedAction String
-  reason          String
-  payload         Json
-  status          ApprovalStatus @default(PENDING)
-  expiresAt       DateTime?
+  id               String            @id @default(cuid())
+  organizationId   String
+  executionId      String
+  action           String
+  payload          Json              @default("{}")
+  status           String            @default("PENDING")
   reviewedByUserId String?
-  reviewedAt      DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  agent           AgentIdentity  @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  reviewedByUser  User?          @relation("ApprovalReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  toolCallTraces  ToolCallTrace[]
+  reviewNote       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution        AgentExecution    @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  reviewedByUser   User?             @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  toolCallTraces   ToolCallTrace[]
 
-  @@index([organizationId, status])
-  @@index([agentId])
+  @@index([organizationId])
+  @@index([executionId])
+  @@index([status])
   @@index([reviewedByUserId])
 }
 ```
@@ -170,7 +173,7 @@ model ApprovalRequest {
 
 ## 2. Machine Authorization Middleware (`requireMachineAuth`)
 
-Verbatim implementation of the preHandler hook in [machineAuthPlugin.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/auth/machineAuthPlugin.ts):
+Verbatim implementation of the preHandler hook in [machineAuthPlugin.ts](../apps/api/src/modules/auth/machineAuthPlugin.ts):
 
 ```typescript
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -182,22 +185,20 @@ export const requireMachineAuth = async (request: FastifyRequest, reply: Fastify
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     throw new HttpError({
       code: "UNAUTHORIZED",
-      message: "Missing or invalid Bearer token",
+      message: "Missing or invalid Bearer authorization header",
       statusCode: 401
     });
   }
 
-  const rawKey = authHeader.replace("Bearer ", "").trim();
-  const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+  const token = authHeader.slice(7).trim();
+  const keyHash = crypto.createHash("sha256").update(token).digest("hex");
 
-  const apiKeyRecord = await request.server.prisma.apiKey.findFirst({
-    where: {
-      keyHash,
-      revokedAt: null
-    }
+  const apiKey = await request.server.prisma.apiKey.findUnique({
+    where: { keyHash },
+    include: { organization: true }
   });
 
-  if (!apiKeyRecord) {
+  if (!apiKey || apiKey.revokedAt) {
     throw new HttpError({
       code: "UNAUTHORIZED",
       message: "Invalid or revoked API key",
@@ -205,27 +206,26 @@ export const requireMachineAuth = async (request: FastifyRequest, reply: Fastify
     });
   }
 
-  if (apiKeyRecord.expiresAt && apiKeyRecord.expiresAt < new Date()) {
+  if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
     throw new HttpError({
       code: "UNAUTHORIZED",
-      message: "Invalid or revoked API key",
+      message: "API key has expired",
       statusCode: 401
     });
   }
 
-  // Asynchronously update lastUsedAt in the background without blocking the request pipeline
+  // Update lastUsedAt asynchronously
   request.server.prisma.apiKey.update({
-    where: { id: apiKeyRecord.id },
+    where: { id: apiKey.id },
     data: { lastUsedAt: new Date() }
-  }).catch((err) => {
-    request.log.error(`[Machine Auth] Failed to update lastUsedAt for API Key ${apiKeyRecord.id}: ${err.message}`);
-  });
+  }).catch(() => {});
 
-  // Populate context for downstream tenant isolation
+  // Populate authContext
   request.authContext = {
-    userId: "machine-actor",
-    organizationId: apiKeyRecord.organizationId,
-    role: "AGENT"
+    userId: `machine:${apiKey.id}`,
+    organizationId: apiKey.organizationId,
+    role: "AGENT",
+    sessionId: `apikey:${apiKey.id}`
   };
 };
 ```
@@ -236,7 +236,7 @@ export const requireMachineAuth = async (request: FastifyRequest, reply: Fastify
 
 ### A. Executions Route Handler (`POST /api/v1/executions`)
 
-Route handler in [agentExecutionRoutes.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
+Route handler in [agentExecutionRoutes.ts](../apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
 ```typescript
   app.post("/executions", async (request, reply) => {
     const context = requireOrgContext(request);
@@ -260,7 +260,7 @@ Route handler in [agentExecutionRoutes.ts](file:///Users/Deadeye/Desktop/Project
   });
 ```
 
-Zod Request Validation Schema (resolved from `@agentready/shared` schema definition in [index.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/packages/shared/src/index.ts)):
+Zod Request Validation Schema (resolved from `@agentready/shared` schema definition in [index.ts](../packages/shared/src/index.ts)):
 ```typescript
 export const jsonRecordSchema = z.record(z.unknown());
 
@@ -282,7 +282,7 @@ export const createAgentExecutionSchema = z.object({
 export const createExecutionBodySchema = createAgentExecutionSchema.omit({ organizationId: true });
 ```
 
-Service Creation implementation (`service.create`) and Side Effects in [agentExecutionService.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionService.ts):
+Service Creation implementation (`service.create`) and Side Effects in [agentExecutionService.ts](../apps/api/src/modules/agent-executions/agentExecutionService.ts):
 ```typescript
   async create(input: CreateAgentExecutionInput) {
     await this.tenancy.requireProject({
@@ -431,7 +431,7 @@ Service Creation implementation (`service.create`) and Side Effects in [agentExe
 
 ### B. Tool Call Trace Route Handler (`POST /api/v1/tool-call-traces`)
 
-Route handler in [agentExecutionRoutes.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
+Route handler in [agentExecutionRoutes.ts](../apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
 ```typescript
   app.post("/tool-call-traces", async (request, reply) => {
     const context = requireOrgContext(request);
@@ -441,7 +441,7 @@ Route handler in [agentExecutionRoutes.ts](file:///Users/Deadeye/Desktop/Project
   });
 ```
 
-Zod Request Validation Schema (resolved from `@agentready/shared` schema definition in [index.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/packages/shared/src/index.ts)):
+Zod Request Validation Schema (resolved from `@agentready/shared` schema definition in [index.ts](../packages/shared/src/index.ts)):
 ```typescript
 export const toolCallStatusSchema = z.enum(["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED"]);
 
@@ -462,7 +462,7 @@ export const createToolCallTraceSchema = z.object({
 export const createToolCallTraceBodySchema = createToolCallTraceSchema.omit({ organizationId: true });
 ```
 
-Service Trace recording implementation (`service.recordToolCall`) and Side Effects in [agentExecutionService.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionService.ts):
+Service Trace recording implementation (`service.recordToolCall`) and Side Effects in [agentExecutionService.ts](../apps/api/src/modules/agent-executions/agentExecutionService.ts):
 ```typescript
   async recordToolCall(input: CreateToolCallTraceInput) {
     await this.tenancy.requireAgent({
@@ -610,7 +610,7 @@ Service Trace recording implementation (`service.recordToolCall`) and Side Effec
 The evaluation logic deciding whether a capability execution or tool call behaves as `AUTOMATIC` (allow immediately), `REQUIRE_APPROVAL` (suspend execution and prompt human), or `BLOCKED` (immediate rejection) is located across the following files and functions:
 
 ### A. Pattern Matching Function
-- **File**: [index.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/packages/shared/src/index.ts)
+- **File**: [index.ts](../packages/shared/src/index.ts)
 - **Function**: `matchPattern`
 - **Code**:
 ```typescript
@@ -622,7 +622,7 @@ export function matchPattern(pattern: string, action: string): boolean {
 ```
 
 ### B. Execution-Start Gating Logic
-- **File**: [agentExecutionService.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionService.ts)
+- **File**: [agentExecutionService.ts](../apps/api/src/modules/agent-executions/agentExecutionService.ts)
 - **Function**: `create`
 - **Logic**: Evaluates contract allowedTools against active gates. Overrides `AUTOMATIC` gates to `REQUIRE_APPROVAL` if the `auto_approval` feature flag is `DISABLED`. Rejects with a 403 forbidden error if `BLOCKED`.
 - **Code Segment**:
@@ -664,7 +664,7 @@ export function matchPattern(pattern: string, action: string): boolean {
 ```
 
 ### C. Live Tool Execution Gating Logic
-- **File**: [agentExecutionService.ts](file:///Users/Deadeye/Desktop/Projects/Agentready/apps/api/src/modules/agent-executions/agentExecutionService.ts)
+- **File**: [agentExecutionService.ts](../apps/api/src/modules/agent-executions/agentExecutionService.ts)
 - **Function**: `recordToolCall`
 - **Logic**: Resolves tool flags and matching gates. Overrides modes according to feature toggles, blocks capabilities when feature flags are `DISABLED` or gate evaluates to `BLOCKED`. Creates an `ApprovalRequest` and suspends the execution to `WAITING_FOR_APPROVAL` if `REQUIRE_APPROVAL` triggers.
 - **Code Segment**:

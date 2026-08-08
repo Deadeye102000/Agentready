@@ -145,13 +145,13 @@ export function SandboxController() {
           onClick={() => setActiveTab("finops")}
           className={`devSandboxTab ${activeTab === "finops" ? "active" : ""}`}
         >
-          FinOps Approver
+          Approval Gate Demo
         </button>
         <button
           onClick={() => setActiveTab("rogue")}
           className={`devSandboxTab ${activeTab === "rogue" ? "active" : ""}`}
         >
-          Rogue Agent Block
+          Blocked Capability Demo
         </button>
         <button
           onClick={() => setActiveTab("eval")}
@@ -171,7 +171,7 @@ export function SandboxController() {
               <div className="promptSection">
                 <span className="sectionLabel">System Prompt</span>
                 <p className="promptText">
-                  "You are an autonomous FinOps agent. Your goal is to resolve customer billing complaints by issuing refunds using the issue_refund tool."
+                  "Target Action: High-value refund execution ($10,000). Objective: Test human approval gate interception for actions requiring authorization."
                 </p>
               </div>
 
