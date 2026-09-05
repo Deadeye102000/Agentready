@@ -14,7 +14,7 @@
  * Run: node --import tsx --test test/*.test.ts
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 // ── Import the module under test (ESM compatible via tsx) ─────────────────────
@@ -27,6 +27,10 @@ import {
   fallbackDashboard,
   fallbackApprovalRequests,
 } from "../src/lib/api.js";
+import {
+  getApiKey,
+  DEV_DEFAULT_SANDBOX_AGENT_API_KEY,
+} from "../src/lib/sandboxAuth.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -284,3 +288,60 @@ describe("Feature Flags Data Contract", () => {
     }
   });
 });
+
+// ─── Sandbox Route Production Secret Protection ───────────────────────────
+
+describe("Sandbox Route Production Secret Protection", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("throws error when NODE_ENV=production and SANDBOX_AGENT_API_KEY is unset", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    delete process.env.SANDBOX_AGENT_API_KEY;
+
+    assert.throws(
+      () => getApiKey(),
+      (err: any) => {
+        assert.match(
+          err.message,
+          /SANDBOX_AGENT_API_KEY is required in production and must not use the development default/
+        );
+        return true;
+      }
+    );
+  });
+
+  it("throws error when NODE_ENV=production and SANDBOX_AGENT_API_KEY is the development default", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    process.env.SANDBOX_AGENT_API_KEY = DEV_DEFAULT_SANDBOX_AGENT_API_KEY;
+
+    assert.throws(
+      () => getApiKey(),
+      (err: any) => {
+        assert.match(
+          err.message,
+          /SANDBOX_AGENT_API_KEY is required in production and must not use the development default/
+        );
+        return true;
+      }
+    );
+  });
+
+  it("returns development default key when NODE_ENV=development and key is unset", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
+    delete process.env.SANDBOX_AGENT_API_KEY;
+
+    assert.equal(getApiKey(), DEV_DEFAULT_SANDBOX_AGENT_API_KEY);
+  });
+
+  it("returns configured key in production when valid secret is provided", () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    process.env.SANDBOX_AGENT_API_KEY = "ar_live_custom_prod_secret_token";
+
+    assert.equal(getApiKey(), "ar_live_custom_prod_secret_token");
+  });
+});
+

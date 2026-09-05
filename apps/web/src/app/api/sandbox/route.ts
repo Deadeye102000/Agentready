@@ -4,9 +4,7 @@ const getApiBaseUrl = () => {
   return process.env.AGENTREADY_API_URL || process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
 };
 
-const getApiKey = () => {
-  return process.env.SANDBOX_AGENT_API_KEY || "ar_dev_demo_agent_key_change_me";
-};
+import { getApiKey } from "../../../lib/sandboxAuth";
 
 // Generic fetch wrapper with support for session cookie or machine Bearer key auth
 const fetchFromBackend = async (
