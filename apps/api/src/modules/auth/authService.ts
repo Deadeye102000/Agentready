@@ -6,8 +6,10 @@ import { AuthRepository } from "./authRepository.js";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 
 export type AuthContext = {
-  userId: string;
   organizationId: string;
+  actorType: "USER" | "AGENT";
+  userId?: string;
+  agentId?: string;
   role?: string;
 };
 
@@ -93,7 +95,18 @@ export class AuthService {
   }
 
   async currentUser(context: AuthContext) {
-    const user = await this.auth.findUserContext(context);
+    if (!context.userId) {
+      throw new HttpError({
+        code: "UNAUTHORIZED",
+        message: "Session is no longer valid",
+        statusCode: 401
+      });
+    }
+
+    const user = await this.auth.findUserContext({
+      userId: context.userId,
+      organizationId: context.organizationId
+    });
     const membership = user?.memberships[0];
     if (!user || !membership) {
       throw new HttpError({

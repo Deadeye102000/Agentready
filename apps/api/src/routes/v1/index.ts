@@ -13,6 +13,7 @@ import {
   getAuthContextFromRequest,
   registerAuthContext
 } from "../../modules/auth/authPlugin.js";
+import { getMachineAuthContextFromRequest } from "../../modules/auth/machineAuthPlugin.js";
 import { registerAuthRoutes } from "../../modules/auth/authRoutes.js";
 import { registerApiKeyRoutes } from "../../modules/api-keys/apiKey.routes.js";
 
@@ -35,7 +36,12 @@ export async function registerV1Routes(app: FastifyInstance) {
 
   await app.register(async (protectedApp) => {
     protectedApp.addHook("preHandler", async (request) => {
-      request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+      const authHeader = request.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        request.authContext = await getMachineAuthContextFromRequest(request);
+      } else {
+        request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+      }
       enforceTenantScope(request);
     });
 

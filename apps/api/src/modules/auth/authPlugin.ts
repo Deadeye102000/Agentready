@@ -33,8 +33,9 @@ export function getAuthContextFromRequest(request: FastifyRequest, sessionSecret
   }
 
   return {
-    userId: session.userId,
-    organizationId: session.organizationId
+    organizationId: session.organizationId,
+    actorType: "USER",
+    userId: session.userId
   };
 }
 

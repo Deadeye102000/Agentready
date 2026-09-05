@@ -128,9 +128,47 @@ describe("API Key Management & Machine Auth Integration Tests", () => {
     assert.equal(testRes.statusCode, 200);
     const testBody = JSON.parse(testRes.body);
     assert.equal(testBody.ok, true);
-    assert.equal(testBody.authContext.userId, "machine-actor");
+    assert.equal(testBody.authContext.actorType, "AGENT");
+    assert.equal(testBody.authContext.agentId, "agent-1");
     assert.equal(testBody.authContext.organizationId, "org-1");
     assert.equal(testBody.authContext.role, "AGENT");
+  });
+
+  it("authenticates real V1 protected route using valid Bearer token", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // Create an API key
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: { name: "V1 Route Key" }
+    });
+    const { rawKey } = JSON.parse(createRes.body);
+
+    // Call real protected V1 route with Bearer token
+    const v1Res = await app.inject({
+      method: "GET",
+      url: "/api/v1/approval-gates",
+      headers: { authorization: `Bearer ${rawKey}` }
+    });
+
+    assert.equal(v1Res.statusCode, 200);
+    const v1Body = JSON.parse(v1Res.body);
+    assert.ok(Array.isArray(v1Body));
+  });
+
+  it("denies access on real V1 protected route when neither valid cookie nor valid Bearer token is provided", async () => {
+    // Call real protected V1 route without auth header or cookie
+    const unauthRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/approval-gates"
+    });
+
+    assert.equal(unauthRes.statusCode, 401);
+    const unauthBody = JSON.parse(unauthRes.body);
+    assert.equal(unauthBody.error.code, "UNAUTHORIZED");
+    assert.equal(unauthBody.error.message, "Authentication required");
   });
 
   it("denies access with missing, invalid or revoked Bearer token", async () => {
