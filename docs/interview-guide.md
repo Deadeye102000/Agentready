@@ -428,16 +428,17 @@ Response types are defined locally in `api.ts` rather than imported from `packag
 The repo is verified across all workspaces:
 - `pnpm typecheck` (zero TypeScript errors across all 7 workspace projects)
 - `pnpm build` (Next.js 15 production bundle + API TypeScript compilation succeed)
-- `pnpm test` (all 114 tests pass, 0 failures, 100% passing)
+- `pnpm test` (all 117 tests pass, 0 failures, 100% passing)
 
 ### How many tests are there and how do they run?
 
-**114 total tests** across two workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
+**117 total tests** across three workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
 
 ```bash
-pnpm test        # all workspaces (114 tests)
+pnpm test        # all workspaces (117 tests)
 pnpm test:api    # API integration tests (91 tests, 18 suites)
 pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
+pnpm test:mcp    # MCP server Bearer auth & stdio integration tests (3 tests, 1 suite)
 ```
 
 ### What do the API integration tests cover?

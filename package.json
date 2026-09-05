@@ -12,6 +12,7 @@
     "test": "pnpm -r test",
     "test:api": "pnpm --filter @agentready/api test",
     "test:web": "pnpm --filter @agentready/web test",
+    "test:mcp": "pnpm --filter @agentready/mcp-server test",
     "db:validate": "pnpm --filter @agentready/db db:validate",
     "db:generate": "pnpm --filter @agentready/db db:generate",
     "db:migrate": "pnpm --filter @agentready/db db:migrate",

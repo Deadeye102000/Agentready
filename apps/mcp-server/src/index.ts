@@ -4,60 +4,72 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
-// Retrieve configuration from environment variables
-const API_BASE_URL = process.env.AGENTREADY_API_URL || "http://localhost:3001";
-const AUTH_TOKEN = process.env.AGENTREADY_AUTH_TOKEN;
-
-// Helper to make authenticated requests to AgentReady API
-async function fetchFromApi(path: string, options: RequestInit = {}) {
-  if (!AUTH_TOKEN) {
-    throw new Error(
-      "AGENTREADY_AUTH_TOKEN is not set. Please provide a valid session token in the environment."
-    );
-  }
-
-  const cleanBase = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  const url = `${cleanBase}${cleanPath}`;
-
-  const headers = new Headers(options.headers || {});
-  headers.set("Cookie", `agentready_session=${AUTH_TOKEN}`);
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      ...options,
-      headers
-    });
-
-    if (!response.ok) {
-      throw new Error(`API returned status ${response.status}: ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error: any) {
-    throw new Error(`Failed to query AgentReady API at ${url}: ${error.message}`);
-  }
+export interface McpServerConfig {
+  apiUrl?: string;
+  apiKey?: string;
 }
 
-// Instantiate the MCP Server
-const server = new Server(
-  {
-    name: "agentready-mcp-server",
-    version: "0.1.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
+export function createMcpServer(config: McpServerConfig = {}) {
+  // Retrieve configuration from options or environment variables
+  const getApiUrl = () =>
+    config.apiUrl || process.env.AGENTREADY_API_URL || "http://localhost:3001";
+  const getApiKey = () =>
+    config.apiKey || process.env.AGENTREADY_API_KEY || process.env.AGENTREADY_AUTH_TOKEN;
 
-// Register Tool Definitions
+  // Helper to make authenticated requests to AgentReady API via Bearer token
+  async function fetchFromApi(apiPath: string, options: RequestInit = {}) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error(
+        "AGENTREADY_API_KEY is not set. Please provide a valid AgentReady API key in the environment."
+      );
+    }
+
+    const baseUrl = getApiUrl();
+    const cleanBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+    const cleanPath = apiPath.startsWith("/") ? apiPath : `/${apiPath}`;
+    const url = `${cleanBase}${cleanPath}`;
+
+    const headers = new Headers(options.headers || {});
+    headers.set("Authorization", `Bearer ${apiKey}`);
+    if (!headers.has("Accept")) {
+      headers.set("Accept", "application/json");
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        ...options,
+        headers
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned status ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      throw new Error(`Failed to query AgentReady API at ${url}: ${error.message}`);
+    }
+  }
+
+  // Instantiate the MCP Server
+  const server = new Server(
+    {
+      name: "agentready-mcp-server",
+      version: "0.1.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
+
+  // Register Tool Definitions
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -315,16 +327,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
-});
+  });
 
-// Start the server using Stdio transport
-async function run() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("AgentReady MCP Server running on stdio");
+  return server;
 }
 
-run().catch((error) => {
-  console.error("Failed to start AgentReady MCP Server:", error);
-  process.exit(1);
-});
+export const server = createMcpServer();
+
+// Start the server using Stdio transport
+export async function runServer(transport?: any) {
+  const actualTransport = transport ?? new StdioServerTransport();
+  await server.connect(actualTransport);
+  console.error("AgentReady MCP Server running on stdio");
+  return server;
+}
+
+const isDirectExecution = () => {
+  if (!process.argv[1]) return false;
+  try {
+    const currentFile = fileURLToPath(import.meta.url);
+    const invokedFile = path.resolve(process.argv[1]);
+    return currentFile === invokedFile;
+  } catch {
+    return false;
+  }
+};
+
+if (isDirectExecution()) {
+  runServer().catch((error) => {
+    console.error("Failed to start AgentReady MCP Server:", error);
+    process.exit(1);
+  });
+}
