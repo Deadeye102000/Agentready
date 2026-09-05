@@ -20,6 +20,7 @@ import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
+import { requireMachineAuth } from "../auth/machineAuthPlugin.js";
 import { requireScope } from "../auth/scopes.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
@@ -28,10 +29,13 @@ import { AgentExecutionRepository } from "./agentExecutionRepository.js";
 import { AgentExecutionService } from "./agentExecutionService.js";
 import { InProcessExecutionRunner } from "./inProcessRunner.js";
 import {
+  checkToolCallBodySchema,
   createExecutionBodySchema,
   createToolCallTraceBodySchema,
   executionListQuerySchema,
   executionParamsSchema,
+  reportToolCallResultBodySchema,
+  toolCallTraceParamsSchema,
   updateExecutionBodySchema,
   updateToolCallTraceBodySchema
 } from "./agentExecutionSchemas.js";
@@ -63,26 +67,20 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
     const context = requireOrgContext(request);
     const body = validateBody(createExecutionBodySchema, request.body);
 
-    // Step 1: Accept — create the QUEUED record with full governance checks.
-    const execution = await service.create({ ...body, organizationId: context.organizationId });
+    const execution = await service.create({
+      ...body,
+      organizationId: context.organizationId
+    });
 
-    // Step 2: Enqueue — hand the work off to the ExecutionRunner boundary.
-    // The runner runs asynchronously (after this response is sent) so the
-    // caller receives the QUEUED record immediately.
-    //
-    // TODO(WORKER-READY): With a queue-based runner, this becomes:
-    //   await runner.enqueue({ id: execution.id, ... })
-    // which pushes a job to the queue and returns immediately.
-    await runner.enqueue({
+    runner.enqueue({
       id: execution.id,
       organizationId: execution.organizationId,
       agentId: execution.agentId,
       timeoutMs: execution.timeoutMs ?? undefined,
-      maxAttempts: execution.maxAttempts ?? 1,
-      attemptCount: execution.attemptCount ?? 0
+      maxAttempts: execution.maxAttempts,
+      attemptCount: execution.attemptCount
     });
 
-    // Step 3: Reply — always 201 with the QUEUED record.
     return reply.code(201).send(execution);
   });
 
@@ -111,6 +109,44 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
     const params = executionParamsSchema.parse(request.params);
     const body = validateBody(updateExecutionBodySchema, request.body);
     return service.transition({ organizationId: context.organizationId, id: params.id, ...body });
+  });
+
+  app.post("/executions/:id/tool-calls/check", {
+    preHandler: [requireScope("tool_calls:check")]
+  }, async (request) => {
+    const context = requireOrgContext(request);
+    const params = executionParamsSchema.parse(request.params);
+    const body = validateBody(checkToolCallBodySchema, request.body);
+    const idempotencyHeader = request.headers["idempotency-key"] as string | undefined;
+
+    return service.checkToolCall({
+      organizationId: context.organizationId,
+      executionId: params.id,
+      toolName: body.toolName,
+      arguments: body.arguments,
+      idempotencyKey: idempotencyHeader || body.idempotencyKey,
+      actorAgentId: context.agentId,
+      actorUserId: context.userId
+    });
+  });
+
+  app.post("/tool-calls/:traceId/result", {
+    preHandler: [requireMachineAuth, requireScope("tool_calls:result")]
+  }, async (request) => {
+    const context = requireOrgContext(request);
+    const params = toolCallTraceParamsSchema.parse(request.params);
+    const body = validateBody(reportToolCallResultBodySchema, request.body);
+
+    return service.reportToolCallResult({
+      organizationId: context.organizationId,
+      traceId: params.traceId,
+      status: body.status,
+      output: body.output,
+      error: body.error,
+      latencyMs: body.latencyMs,
+      isFinalAction: body.isFinalAction,
+      actorAgentId: context.agentId
+    });
   });
 
   app.post("/tool-call-traces", {

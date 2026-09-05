@@ -12,6 +12,8 @@ export const API_KEY_SCOPES = [
   "governance:read",
   "traces:read",
   "traces:write",
+  "tool_calls:check",
+  "tool_calls:result",
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];

@@ -119,6 +119,43 @@ export class AgentExecutionRepository {
     });
   }
 
+  findTraceByOwnership(input: { organizationId: string; id: string; agentId?: string }) {
+    return this.prisma.toolCallTrace.findFirst({
+      where: {
+        id: input.id,
+        organizationId: input.organizationId,
+        ...(input.agentId ? { agentId: input.agentId } : {})
+      }
+    });
+  }
+
+  findPendingTrace(executionId: string) {
+    return this.prisma.toolCallTrace.findFirst({
+      where: {
+        executionId,
+        status: "PENDING"
+      }
+    });
+  }
+
+  findTraceByApprovalId(approvalRequestId: string) {
+    return this.prisma.toolCallTrace.findFirst({
+      where: {
+        approvalRequestId
+      }
+    });
+  }
+
+  findTracesForExecution(executionId: string, since?: Date) {
+    return this.prisma.toolCallTrace.findMany({
+      where: {
+        executionId,
+        ...(since ? { startedAt: { gte: since } } : {})
+      },
+      orderBy: { startedAt: "desc" }
+    });
+  }
+
   createTrace(data: Prisma.ToolCallTraceUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.toolCallTrace.create({ data });
   }
@@ -147,5 +184,61 @@ export class AgentExecutionRepository {
     });
 
     return this.findTraceById({ organizationId: input.organizationId, id: input.id });
+  }
+
+  async updateTraceDirect(id: string, data: Prisma.ToolCallTraceUncheckedUpdateInput) {
+    return this.prisma.toolCallTrace.update({
+      where: { id },
+      data
+    });
+  }
+
+  async updateTracesForApproval(
+    approvalRequestId: string,
+    data: { status: ToolCallStatus; error?: string; completedAt?: Date }
+  ) {
+    return this.prisma.toolCallTrace.updateMany({
+      where: {
+        approvalRequestId,
+        status: "AWAITING_APPROVAL"
+      },
+      data
+    });
+  }
+
+  findApprovedRequest(input: { organizationId: string; executionId: string; toolName: string }) {
+    return this.prisma.approvalRequest.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        status: "APPROVED",
+        requestedAction: input.toolName,
+        payload: {
+          path: ["executionId"],
+          equals: input.executionId
+        }
+      }
+    });
+  }
+
+  consumeApprovalRequest(approvalId: string) {
+    return this.prisma.approvalRequest.update({
+      where: { id: approvalId },
+      data: { status: "CONSUMED" }
+    });
+  }
+
+  findIdempotencyKey(organizationId: string, key: string) {
+    return this.prisma.idempotencyKey.findUnique({
+      where: {
+        organizationId_key: {
+          organizationId,
+          key
+        }
+      }
+    });
+  }
+
+  createIdempotencyKey(data: Prisma.IdempotencyKeyUncheckedCreateInput) {
+    return this.prisma.idempotencyKey.create({ data });
   }
 }

@@ -12,7 +12,7 @@ export const approvalRequestParamsSchema = z.object({
 });
 
 export const reviewApprovalRequestBodySchema = z.object({
-  status: z.enum(["APPROVED", "REJECTED"]),
+  status: z.enum(["APPROVED", "REJECTED", "EXPIRED"]),
   note: z.string().optional()
 });
 

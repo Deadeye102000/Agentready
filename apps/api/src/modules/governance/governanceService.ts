@@ -97,7 +97,7 @@ export class GovernanceService {
   async reviewApprovalRequest(input: {
     organizationId: string;
     id: string;
-    status: "APPROVED" | "REJECTED";
+    status: "APPROVED" | "REJECTED" | "EXPIRED";
     reviewedByUserId: string;
     note?: string;
   }) {
@@ -152,6 +152,14 @@ export class GovernanceService {
           after: { status: nextStatus, output }
         });
       }
+    }
+
+    if (input.status === "REJECTED" || input.status === "EXPIRED") {
+      await this.executions.updateTracesForApproval(approval.id, {
+        status: "BLOCKED",
+        error: input.status === "REJECTED" ? (input.note ?? "Approval rejected by reviewer") : "Approval expired",
+        completedAt: new Date()
+      });
     }
 
     await this.audit.record({

@@ -26,6 +26,7 @@ enum ApprovalStatus {
   APPROVED
   REJECTED
   EXPIRED
+  CONSUMED
 }
 
 enum ProjectStatus {
@@ -56,6 +57,7 @@ enum ToolCallStatus {
   SUCCEEDED
   FAILED
   BLOCKED
+  AWAITING_APPROVAL
 }
 
 enum EvalRunStatus {

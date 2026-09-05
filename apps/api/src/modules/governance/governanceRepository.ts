@@ -132,7 +132,7 @@ export class GovernanceRepository {
   async reviewApprovalRequest(input: {
     organizationId: string;
     id: string;
-    status: "APPROVED" | "REJECTED";
+    status: "APPROVED" | "REJECTED" | "EXPIRED";
     reviewedByUserId: string;
   }) {
     await this.prisma.approvalRequest.updateMany({

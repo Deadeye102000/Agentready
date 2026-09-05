@@ -428,21 +428,21 @@ Response types are defined locally in `api.ts` rather than imported from `packag
 The repo is verified across all workspaces:
 - `pnpm typecheck` (zero TypeScript errors across all 7 workspace projects)
 - `pnpm build` (Next.js 15 production bundle + API TypeScript compilation succeed)
-- `pnpm test` (all 104 tests pass, 0 failures, 100% passing)
+- `pnpm test` (all 114 tests pass, 0 failures, 100% passing)
 
 ### How many tests are there and how do they run?
 
-**104 total tests** across two workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
+**114 total tests** across two workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
 
 ```bash
-pnpm test        # all workspaces (104 tests)
-pnpm test:api    # API integration tests (81 tests, 15 suites)
+pnpm test        # all workspaces (114 tests)
+pnpm test:api    # API integration tests (91 tests, 18 suites)
 pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
 ```
 
 ### What do the API integration tests cover?
 
-15 comprehensive test suites in `apps/api/test`:
+18 comprehensive test suites in `apps/api/test`:
 - **Auth** (5): registration, login, invalid credentials, session cookie verification, `/me` endpoint.
 - **API Keys & Machine Auth** (6): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions, invalid key rejection, session cookie vs Bearer key dual auth, audit logging on issuance and revocation (with strict secret exclusion).
 - **API Key Scope Enforcement** (8): exact scope verification, resource wildcards (`executions:*`), full superuser scopes (`admin`, `all`), write route rejection for read-only keys (403), and immunity for session users.
@@ -451,6 +451,7 @@ pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
 - **Tenancy** (3): cross-org isolation, 403/404 boundary enforcement, foreign ID injection prevention.
 - **Role-Based Access Control (RBAC)** (10): hierarchical role enforcement (Owner > Admin > Approver > Operator > Viewer), 403 on insufficient privilege for task contracts, eval cases, gates, and flags.
 - **Background Execution Worker** (3): poller claiming `QUEUED` executions, atomic transition to `RUNNING`, `SYSTEM` audit log generation.
+- **Synchronous Tool Call Governance & Lifecycle** (9): `/tool-calls/check` pre-flight gate, single-flight 409 enforcement, canonicalized argument hashing & secret redaction, state-based idempotency caching & mismatch 409, complete approval-then-resume path (AWAITING_APPROVAL -> APPROVED -> in-place PENDING transition -> CONSUMED approval -> result), reject & expire trace transitions to BLOCKED, circuit breaker trip after 3 consecutive blocks, dedicated scopes (`tool_calls:check`, `tool_calls:result`), and machine-only `/result` endpoint.
 - **Approval Gates** (~11): wildcard gate patterns, risk thresholds, `WAITING_FOR_APPROVAL` pause, approval/rejection lifecycle.
 - **Feature Flags** (6): blocked capabilities, toggle API, auto-approval override, audit log writes.
 - **Eval Framework** (6): case creation, scoring formula, suite runs, flag-blocked eval.

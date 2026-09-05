@@ -88,8 +88,116 @@ export class ExecutionRunnerService {
           }
         });
 
-        // 5. Stub the actual agent execution
-        // TODO: Invoke Agent Execution Harness here
+        // 5. Invoke Agent Execution Harness / Webhook
+        const webhookUrl = process.env.AGENT_RUNNER_WEBHOOK_URL;
+        const isProduction = process.env.NODE_ENV === "production";
+
+        if (isProduction && !webhookUrl) {
+          // In production, a missing webhook URL must fail the execution immediately
+          await this.prisma.agentExecution.update({
+            where: { id: exec.id },
+            data: {
+              status: "FAILED",
+              failureReason: "RUNNER_ERROR",
+              completedAt: new Date(),
+              output: { error: "AGENT_RUNNER_WEBHOOK_URL is required in production but not configured" }
+            }
+          });
+          await this.auditService.record({
+            organizationId: exec.organizationId,
+            source: "SYSTEM",
+            action: "agent_execution.runner_failed",
+            resourceType: "AgentExecution",
+            resourceId: exec.id,
+            before: { status: "RUNNING" },
+            after: { status: "FAILED", failureReason: "RUNNER_ERROR" },
+            metadata: { error: "Missing AGENT_RUNNER_WEBHOOK_URL in production" }
+          });
+          continue;
+        }
+
+        if (webhookUrl) {
+          const contract = exec.contractId
+            ? await this.prisma.taskContract.findUnique({ where: { id: exec.contractId } })
+            : null;
+
+          const controller = new AbortController();
+          const timeoutMs = exec.timeoutMs ?? 30000;
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+          try {
+            const resp = await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                executionId: exec.id,
+                organizationId: exec.organizationId,
+                agentId: exec.agentId,
+                objective: exec.objective,
+                input: exec.input,
+                contract: contract
+                  ? {
+                      name: contract.name,
+                      version: contract.version,
+                      allowedTools: contract.allowedTools,
+                      successCriteria: contract.successCriteria
+                    }
+                  : null
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timer);
+
+            if (!resp.ok) {
+              const errText = await resp.text().catch(() => "");
+              await this.prisma.agentExecution.update({
+                where: { id: exec.id },
+                data: {
+                  status: "FAILED",
+                  failureReason: "RUNNER_ERROR",
+                  completedAt: new Date(),
+                  output: { error: `Webhook returned HTTP ${resp.status}: ${errText}` }
+                }
+              });
+            } else {
+              const resData = (await resp.json().catch(() => ({}))) as any;
+              if (resData.status === "FAILED") {
+                await this.prisma.agentExecution.update({
+                  where: { id: exec.id },
+                  data: {
+                    status: "FAILED",
+                    failureReason: "RUNNER_ERROR",
+                    completedAt: new Date(),
+                    output: resData.output ?? { error: resData.error }
+                  }
+                });
+              } else if (resData.status === "SUCCEEDED") {
+                await this.prisma.agentExecution.update({
+                  where: { id: exec.id },
+                  data: {
+                    status: "SUCCEEDED",
+                    completedAt: new Date(),
+                    output: resData.output ?? {}
+                  }
+                });
+              }
+            }
+          } catch (webhookErr: any) {
+            clearTimeout(timer);
+            const isTimeout = webhookErr.name === "AbortError";
+            await this.prisma.agentExecution.update({
+              where: { id: exec.id },
+              data: {
+                status: "FAILED",
+                failureReason: isTimeout ? "TIMEOUT" : "RUNNER_ERROR",
+                timedOutAt: isTimeout ? new Date() : null,
+                completedAt: new Date(),
+                output: { error: webhookErr.message }
+              }
+            });
+          }
+        }
 
       } catch (err: any) {
         console.error(`[Worker] Error processing execution ${exec.id}: ${err.message}`);

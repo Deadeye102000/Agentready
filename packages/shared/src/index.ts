@@ -9,7 +9,7 @@ export const agentExecutionStatusSchema = z.enum([
   "CANCELLED"
 ]);
 
-export const toolCallStatusSchema = z.enum(["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED"]);
+export const toolCallStatusSchema = z.enum(["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "AWAITING_APPROVAL"]);
 
 export const evalRunStatusSchema = z.enum(["QUEUED", "RUNNING", "PASSED", "FAILED", "ERRORED"]);
 

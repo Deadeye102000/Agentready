@@ -169,6 +169,8 @@ graph TD
 | Executions | GET | `/api/v1/executions` | List org executions |
 | Executions | GET | `/api/v1/executions/:id` | Get execution detail |
 | Executions | PATCH | `/api/v1/executions/:id` | Update execution status |
+| Tool Governance | POST | `/api/v1/executions/:id/tool-calls/check` | Synchronous pre-flight tool check (ALLOW/BLOCK/WAIT_FOR_APPROVAL, single-flight, circuit breaker, idempotency) |
+| Tool Governance | POST | `/api/v1/tool-calls/:traceId/result` | Report tool execution result (machine-auth only, PENDING to SUCCEEDED/FAILED, state-based idempotency) |
 | Tool Traces | POST | `/api/v1/tool-call-traces` | Record tool call (gate enforcement) |
 | Tool Traces | GET | `/api/v1/tool-call-traces` | List tool traces |
 | Contracts | POST | `/api/v1/task-contracts` | Create task contract |

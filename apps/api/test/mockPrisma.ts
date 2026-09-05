@@ -18,6 +18,7 @@ export interface MockStore {
   approvalRequests: any[];
   evalCases: any[];
   apiKeys: any[];
+  idempotencyKeys: any[];
 }
 
 export const mockStore: MockStore = {
@@ -37,6 +38,7 @@ export const mockStore: MockStore = {
   approvalRequests: [],
   evalCases: [],
   apiKeys: [],
+  idempotencyKeys: [],
 };
 
 export function resetMockStore() {
@@ -56,6 +58,7 @@ export function resetMockStore() {
   mockStore.approvalRequests = [];
   mockStore.evalCases = [];
   mockStore.apiKeys = [];
+  mockStore.idempotencyKeys = [];
 }
 
 // Helper to generate IDs
@@ -364,6 +367,65 @@ mockPrisma.toolCallTrace.create = async (args: any) => {
   return trace;
 };
 
+mockPrisma.toolCallTrace.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.toolCallTraces.find((t) => {
+    if (where.id && t.id !== where.id) return false;
+    if (where.organizationId && t.organizationId !== where.organizationId) return false;
+    if (where.executionId && t.executionId !== where.executionId) return false;
+    if (where.agentId && t.agentId !== where.agentId) return false;
+    if (where.status && t.status !== where.status) return false;
+    if (where.approvalRequestId && t.approvalRequestId !== where.approvalRequestId) return false;
+    return true;
+  }) || null;
+};
+
+mockPrisma.toolCallTrace.findMany = async (args: any) => {
+  const where = args.where || {};
+  let matches = mockStore.toolCallTraces.filter((t) => {
+    if (where.executionId && t.executionId !== where.executionId) return false;
+    if (where.organizationId && t.organizationId !== where.organizationId) return false;
+    if (where.status && t.status !== where.status) return false;
+    if (where.startedAt?.gte && t.startedAt < where.startedAt.gte) return false;
+    return true;
+  });
+  if (args.orderBy?.startedAt === "desc") {
+    matches = matches.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  }
+  return matches;
+};
+
+mockPrisma.toolCallTrace.update = async (args: any) => {
+  const { where, data } = args;
+  const trace = mockStore.toolCallTraces.find((t) => t.id === where.id);
+  if (!trace) throw new Error("ToolCallTrace not found");
+  if (data.status !== undefined) trace.status = data.status;
+  if (data.output !== undefined) trace.output = data.output;
+  if (data.error !== undefined) trace.error = data.error;
+  if (data.latencyMs !== undefined) trace.latencyMs = data.latencyMs;
+  if (data.completedAt !== undefined) trace.completedAt = data.completedAt;
+  return trace;
+};
+
+mockPrisma.toolCallTrace.updateMany = async (args: any) => {
+  const { where, data } = args;
+  const matches = mockStore.toolCallTraces.filter((t) => {
+    if (where.id && t.id !== where.id) return false;
+    if (where.organizationId && t.organizationId !== where.organizationId) return false;
+    if (where.approvalRequestId && t.approvalRequestId !== where.approvalRequestId) return false;
+    if (where.status && t.status !== where.status) return false;
+    return true;
+  });
+  for (const t of matches) {
+    if (data.status !== undefined) t.status = data.status;
+    if (data.output !== undefined) t.output = data.output;
+    if (data.error !== undefined) t.error = data.error;
+    if (data.latencyMs !== undefined) t.latencyMs = data.latencyMs;
+    if (data.completedAt !== undefined) t.completedAt = data.completedAt;
+  }
+  return { count: matches.length };
+};
+
 // Audit log
 mockPrisma.auditLog.create = async (args: any) => {
   const data = args.data;
@@ -543,9 +605,28 @@ mockPrisma.approvalRequest.findMany = async (args: any) => {
 
 mockPrisma.approvalRequest.findFirst = async (args: any) => {
   const where = args.where || {};
-  return mockStore.approvalRequests.find(
-    (r) => (!where.id || r.id === where.id) && (!where.organizationId || r.organizationId === where.organizationId)
-  ) || null;
+  return mockStore.approvalRequests.find((r) => {
+    if (where.id && r.id !== where.id) return false;
+    if (where.organizationId && r.organizationId !== where.organizationId) return false;
+    if (where.status && r.status !== where.status) return false;
+    if (where.requestedAction && r.requestedAction !== where.requestedAction) return false;
+    if (where.payload?.path && where.payload?.equals) {
+      const [field] = where.payload.path;
+      if (r.payload?.[field] !== where.payload.equals) return false;
+    }
+    return true;
+  }) || null;
+};
+
+mockPrisma.approvalRequest.update = async (args: any) => {
+  const { where, data } = args;
+  const req = mockStore.approvalRequests.find((r) => r.id === where.id);
+  if (!req) throw new Error("ApprovalRequest not found");
+  if (data.status !== undefined) req.status = data.status;
+  if (data.reviewedByUserId !== undefined) req.reviewedByUserId = data.reviewedByUserId;
+  if (data.reviewedAt !== undefined) req.reviewedAt = data.reviewedAt;
+  req.updatedAt = new Date();
+  return req;
 };
 
 mockPrisma.approvalRequest.updateMany = async (args: any) => {
@@ -560,6 +641,37 @@ mockPrisma.approvalRequest.updateMany = async (args: any) => {
     match.updatedAt = new Date();
   }
   return { count: matches.length };
+};
+
+// Idempotency Key
+if (!mockPrisma.idempotencyKey) mockPrisma.idempotencyKey = {};
+mockPrisma.idempotencyKey.findUnique = async (args: any) => {
+  const where = args.where?.organizationId_key;
+  if (!where) return null;
+  return mockStore.idempotencyKeys.find(
+    (k) => k.organizationId === where.organizationId && k.key === where.key
+  ) || null;
+};
+
+mockPrisma.idempotencyKey.create = async (args: any) => {
+  const data = args.data;
+  const record = {
+    id: genId(),
+    organizationId: data.organizationId,
+    key: data.key,
+    requestHash: data.requestHash,
+    route: data.route,
+    actorType: data.actorType,
+    actorUserId: data.actorUserId || null,
+    actorAgentId: data.actorAgentId || null,
+    responseStatus: data.responseStatus || 200,
+    responseBody: data.responseBody || null,
+    expiresAt: data.expiresAt || new Date(Date.now() + 86400000),
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+  mockStore.idempotencyKeys.push(record);
+  return record;
 };
 
 // Eval Cases
@@ -696,7 +808,7 @@ mockPrisma.apiKey = {
       if (where.keyHash && k.keyHash !== where.keyHash) return false;
       if (where.id && k.id !== where.id) return false;
       if (where.organizationId && k.organizationId !== where.organizationId) return false;
-      if (where.revokedAt === null && k.revokedAt !== null) return false;
+      if (where.revokedAt === null && k.revokedAt != null) return false;
       return true;
     }) || null;
   },
