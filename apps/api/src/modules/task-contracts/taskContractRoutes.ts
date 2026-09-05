@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
+import { requireRole } from "../auth/rbac.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { TaskContractRepository } from "./taskContractRepository.js";
@@ -27,7 +28,9 @@ export async function registerTaskContractRoutes(app: FastifyInstance) {
     return service.list({ ...query, organizationId: context.organizationId });
   });
 
-  app.post("/task-contracts", async (request, reply) => {
+  app.post("/task-contracts", {
+    preHandler: [requireRole(["OWNER", "ADMIN"])]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createTaskContractBodySchema, request.body);
     const contract = await service.create({

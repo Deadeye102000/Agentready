@@ -5,6 +5,7 @@ import { AuditService } from "../audit/auditService.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
+import { requireRole } from "../auth/rbac.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
 import { AgentExecutionService } from "../agent-executions/agentExecutionService.js";
@@ -63,7 +64,9 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
   });
 
   // Eval Cases
-  app.post("/eval-cases", async (request, reply) => {
+  app.post("/eval-cases", {
+    preHandler: [requireRole(["OWNER", "ADMIN"])]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createEvalCaseBodySchema, request.body);
     const evalCase = await service.createCase({ ...body, organizationId: context.organizationId });
