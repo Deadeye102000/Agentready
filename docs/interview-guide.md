@@ -444,7 +444,7 @@ pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
 
 15 comprehensive test suites in `apps/api/test`:
 - **Auth** (5): registration, login, invalid credentials, session cookie verification, `/me` endpoint.
-- **API Keys & Machine Auth** (5): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions, invalid key rejection, session cookie vs Bearer key dual auth.
+- **API Keys & Machine Auth** (6): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions, invalid key rejection, session cookie vs Bearer key dual auth, audit logging on issuance and revocation (with strict secret exclusion).
 - **API Key Scope Enforcement** (8): exact scope verification, resource wildcards (`executions:*`), full superuser scopes (`admin`, `all`), write route rejection for read-only keys (403), and immunity for session users.
 - **Environment & Startup Protection** (5): missing `AUTH_SESSION_SECRET` fail-fast in production, fallback in dev, sub-process startup exit code 1.
 - **Execution State Machine** (6): valid/invalid lifecycle transitions, terminal state protection.

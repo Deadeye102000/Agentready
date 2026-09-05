@@ -106,6 +106,63 @@ describe("API Key Management & Machine Auth Integration Tests", () => {
     assert.ok(deleteBody.revokedAt);
   });
 
+  it("records audit log entries on API key creation and revocation without exposing raw key or hash", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // 1. Create API key
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: { name: "Audit Key", scopes: ["executions:read"] }
+    });
+
+    assert.equal(createRes.statusCode, 200);
+    const { apiKeyRecord, rawKey } = JSON.parse(createRes.body);
+
+    // Verify create audit entry
+    const createAudit = mockStore.auditLogs.find(
+      (log) => log.action === "api_key.created" && log.targetId === apiKeyRecord.id
+    );
+    assert.ok(createAudit, "Expected audit log for api_key.created");
+    assert.equal(createAudit.organizationId, "org-1");
+    assert.equal(createAudit.actorType, "USER");
+    assert.equal(createAudit.actorUserId, "user-1");
+    assert.equal(createAudit.targetType, "ApiKey");
+    assert.equal(createAudit.targetId, apiKeyRecord.id);
+    assert.ok(createAudit.createdAt instanceof Date);
+
+    // Ensure raw key and key hash are never stored in audit log
+    const createAuditStr = JSON.stringify(createAudit);
+    assert.equal(createAuditStr.includes(rawKey), false, "Raw key must never be logged");
+    assert.equal(createAuditStr.includes(apiKeyRecord.keyHash), false, "Key hash must never be logged");
+
+    // 2. Revoke API key
+    const revokeRes = await app.inject({
+      method: "DELETE",
+      url: `/api/v1/api-keys/${apiKeyRecord.id}`,
+      headers: { cookie }
+    });
+
+    assert.equal(revokeRes.statusCode, 200);
+
+    // Verify revoke audit entry
+    const revokeAudit = mockStore.auditLogs.find(
+      (log) => log.action === "api_key.revoked" && log.targetId === apiKeyRecord.id
+    );
+    assert.ok(revokeAudit, "Expected audit log for api_key.revoked");
+    assert.equal(revokeAudit.organizationId, "org-1");
+    assert.equal(revokeAudit.actorType, "USER");
+    assert.equal(revokeAudit.actorUserId, "user-1");
+    assert.equal(revokeAudit.targetType, "ApiKey");
+    assert.equal(revokeAudit.targetId, apiKeyRecord.id);
+    assert.ok(revokeAudit.createdAt instanceof Date);
+
+    const revokeAuditStr = JSON.stringify(revokeAudit);
+    assert.equal(revokeAuditStr.includes(rawKey), false, "Raw key must never be logged on revoke");
+    assert.equal(revokeAuditStr.includes(apiKeyRecord.keyHash), false, "Key hash must never be logged on revoke");
+  });
+
   it("authenticates and scopes request using valid Bearer token", async () => {
     const cookie = getSessionCookie("user-1", "org-1");
 

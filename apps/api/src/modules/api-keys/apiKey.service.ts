@@ -1,11 +1,25 @@
 import crypto from "crypto";
 import type { PrismaClient } from "@agentready/db";
 import { HttpError } from "../../lib/httpError.js";
+import { AuditRepository } from "../audit/auditRepository.js";
+import { AuditService } from "../audit/auditService.js";
 
 export class ApiKeyService {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly audit: AuditService;
 
-  async createApiKey(organizationId: string, name: string, scopes: string[] = ["all"]) {
+  constructor(
+    private readonly prisma: PrismaClient,
+    audit?: AuditService
+  ) {
+    this.audit = audit ?? new AuditService(new AuditRepository(prisma));
+  }
+
+  async createApiKey(
+    organizationId: string,
+    name: string,
+    scopes: string[] = ["all"],
+    actorUserId?: string
+  ) {
     const randomBytes = crypto.randomBytes(24).toString("base64url");
     const rawKey = `ar_live_${randomBytes}`;
     const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
@@ -36,6 +50,27 @@ export class ApiKeyService {
       }
     });
 
+    await this.audit.record({
+      organizationId,
+      source: "HUMAN",
+      actorUserId,
+      action: "api_key.created",
+      resourceType: "ApiKey",
+      resourceId: apiKeyRecord.id,
+      after: {
+        id: apiKeyRecord.id,
+        name: apiKeyRecord.name,
+        keyPrefix: apiKeyRecord.keyPrefix,
+        scopes: apiKeyRecord.scopes,
+        agentId: apiKeyRecord.agentId
+      },
+      metadata: {
+        name: apiKeyRecord.name,
+        keyPrefix: apiKeyRecord.keyPrefix,
+        scopes: apiKeyRecord.scopes
+      }
+    });
+
     return { rawKey, apiKeyRecord };
   }
 
@@ -59,7 +94,7 @@ export class ApiKeyService {
     });
   }
 
-  async revokeApiKey(organizationId: string, keyId: string) {
+  async revokeApiKey(organizationId: string, keyId: string, actorUserId?: string) {
     const key = await this.prisma.apiKey.findFirst({
       where: { id: keyId, organizationId }
     });
@@ -72,9 +107,36 @@ export class ApiKeyService {
       });
     }
 
-    return this.prisma.apiKey.update({
+    const updated = await this.prisma.apiKey.update({
       where: { id: keyId },
       data: { revokedAt: new Date() }
     });
+
+    await this.audit.record({
+      organizationId,
+      source: "HUMAN",
+      actorUserId,
+      action: "api_key.revoked",
+      resourceType: "ApiKey",
+      resourceId: keyId,
+      before: {
+        id: key.id,
+        name: key.name,
+        keyPrefix: key.keyPrefix,
+        revokedAt: key.revokedAt
+      },
+      after: {
+        id: updated.id,
+        name: updated.name,
+        keyPrefix: updated.keyPrefix,
+        revokedAt: updated.revokedAt
+      },
+      metadata: {
+        name: key.name,
+        keyPrefix: key.keyPrefix
+      }
+    });
+
+    return updated;
   }
 }
