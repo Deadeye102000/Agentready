@@ -5,7 +5,8 @@ import { requireRole } from "../auth/rbac.js";
 import { ApiKeyService } from "./apiKey.service.js";
 
 const apiKeyBodySchema = z.object({
-  name: z.string().min(1)
+  name: z.string().min(1),
+  scopes: z.array(z.string()).optional()
 });
 
 export async function registerApiKeyRoutes(app: FastifyInstance) {
@@ -17,7 +18,7 @@ export async function registerApiKeyRoutes(app: FastifyInstance) {
   }, async (request) => {
     const context = request.authContext!;
     const body = validateBody(apiKeyBodySchema, request.body);
-    return service.createApiKey(context.organizationId, body.name);
+    return service.createApiKey(context.organizationId, body.name, body.scopes);
   });
 
   app.get("/api-keys", {

@@ -5,7 +5,7 @@ import { HttpError } from "../../lib/httpError.js";
 export class ApiKeyService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async createApiKey(organizationId: string, name: string) {
+  async createApiKey(organizationId: string, name: string, scopes: string[] = ["all"]) {
     const randomBytes = crypto.randomBytes(24).toString("base64url");
     const rawKey = `ar_live_${randomBytes}`;
     const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
@@ -32,7 +32,7 @@ export class ApiKeyService {
         name,
         keyPrefix,
         keyHash,
-        scopes: ["all"]
+        scopes
       }
     });
 

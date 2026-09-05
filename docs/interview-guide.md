@@ -93,7 +93,8 @@ AgentReady enforces a dual-authentication model supporting both human dashboard 
    - Bearer token authentication via `Authorization: Bearer <api-key>`.
    - Keys follow standard prefix formats: `ar_live_` (production) or `ar_test_` (sandbox/staging).
    - Keys are **never stored in plaintext**; the database stores only SHA-256 cryptographic digests (`crypto.createHash("sha256").update(rawKey).digest("hex")`).
-   - Scoped permissions enforce fine-grained capabilities: `agent_execution:write`, `trace:write`, `eval:write`.
+   - Granular, strictly-enforced scopes: `executions:read`, `executions:write`, `eval:read`, `eval:write`, `contracts:read`, `governance:read`, `admin`, `all`.
+   - Preserved in `request.authContext.scopes` and enforced per-route via `requireScope()` pre-handlers (human session users remain unaffected).
    - Resolved automatically in Fastify request pre-handlers via `machineAuthPlugin` and `authPlugin`.
 
 ### How does Role-Based Access Control (RBAC) work?
@@ -427,27 +428,28 @@ Response types are defined locally in `api.ts` rather than imported from `packag
 The repo is verified across all workspaces:
 - `pnpm typecheck` (zero TypeScript errors across all 7 workspace projects)
 - `pnpm build` (Next.js 15 production bundle + API TypeScript compilation succeed)
-- `pnpm test` (all 87 tests pass, 0 failures, 100% passing)
+- `pnpm test` (all 104 tests pass, 0 failures, 100% passing)
 
 ### How many tests are there and how do they run?
 
-**87 total tests** across two workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
+**104 total tests** across two workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
 
 ```bash
-pnpm test        # all workspaces (87 tests)
-pnpm test:api    # API integration tests (64 tests, 14 suites)
+pnpm test        # all workspaces (104 tests)
+pnpm test:api    # API integration tests (81 tests, 15 suites)
 pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
 ```
 
 ### What do the API integration tests cover?
 
-14 comprehensive test suites in `apps/api/test`:
+15 comprehensive test suites in `apps/api/test`:
 - **Auth** (5): registration, login, invalid credentials, session cookie verification, `/me` endpoint.
-- **API Keys & Machine Auth** (5): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions (`agent_execution:write`, `trace:write`, `eval:write`), invalid key rejection, session cookie vs Bearer key dual auth.
+- **API Keys & Machine Auth** (5): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions, invalid key rejection, session cookie vs Bearer key dual auth.
+- **API Key Scope Enforcement** (8): exact scope verification, resource wildcards (`executions:*`), full superuser scopes (`admin`, `all`), write route rejection for read-only keys (403), and immunity for session users.
 - **Environment & Startup Protection** (5): missing `AUTH_SESSION_SECRET` fail-fast in production, fallback in dev, sub-process startup exit code 1.
 - **Execution State Machine** (6): valid/invalid lifecycle transitions, terminal state protection.
 - **Tenancy** (3): cross-org isolation, 403/404 boundary enforcement, foreign ID injection prevention.
-- **Role-Based Access Control (RBAC)** (4): hierarchical role enforcement (Owner > Admin > Approver > Operator > Viewer), 403 on insufficient privilege.
+- **Role-Based Access Control (RBAC)** (10): hierarchical role enforcement (Owner > Admin > Approver > Operator > Viewer), 403 on insufficient privilege for task contracts, eval cases, gates, and flags.
 - **Background Execution Worker** (3): poller claiming `QUEUED` executions, atomic transition to `RUNNING`, `SYSTEM` audit log generation.
 - **Approval Gates** (~11): wildcard gate patterns, risk thresholds, `WAITING_FOR_APPROVAL` pause, approval/rejection lifecycle.
 - **Feature Flags** (6): blocked capabilities, toggle API, auto-approval override, audit log writes.

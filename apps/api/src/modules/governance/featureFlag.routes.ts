@@ -3,11 +3,14 @@ import { z } from "zod";
 import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { requireRole } from "../auth/rbac.js";
+import { requireScope } from "../auth/scopes.js";
 import type { GovernanceService } from "./governanceService.js";
 import { featureFlagBodySchema } from "./governanceSchemas.js";
 
 export async function registerFeatureFlagRoutes(app: FastifyInstance, service: GovernanceService) {
-  app.get("/feature-flags", async (request) => {
+  app.get("/feature-flags", {
+    preHandler: [requireScope("governance:read")]
+  }, async (request) => {
     const context = request.authContext!;
     return service.listFeatureFlags({ organizationId: context.organizationId });
   });

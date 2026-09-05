@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
+import { requireScope } from "../auth/scopes.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { GovernanceRepository } from "./governanceRepository.js";
@@ -24,7 +25,9 @@ export async function registerGovernanceRoutes(app: FastifyInstance) {
   await registerApprovalRoutes(app, service);
 
   // Keep MCP servers routes in the main governanceRoutes file
-  app.get("/mcp-servers", async (request) => {
+  app.get("/mcp-servers", {
+    preHandler: [requireScope("governance:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     emptyQuerySchema.parse(request.query);
     return service.listMcpServers({ organizationId: context.organizationId });

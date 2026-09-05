@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { requireRole } from "../auth/rbac.js";
+import { requireScope } from "../auth/scopes.js";
 import type { GovernanceService } from "./governanceService.js";
 import {
   approvalGateBodySchema,
@@ -12,7 +13,9 @@ import {
 } from "./governanceSchemas.js";
 
 export async function registerApprovalRoutes(app: FastifyInstance, service: GovernanceService) {
-  app.get("/approval-gates", async (request) => {
+  app.get("/approval-gates", {
+    preHandler: [requireScope("governance:read")]
+  }, async (request) => {
     const context = request.authContext!;
     emptyQuerySchema.parse(request.query);
     return service.listApprovalGates({ organizationId: context.organizationId });
@@ -30,7 +33,9 @@ export async function registerApprovalRoutes(app: FastifyInstance, service: Gove
     });
   });
 
-  app.get("/approval-requests", async (request) => {
+  app.get("/approval-requests", {
+    preHandler: [requireScope("governance:read")]
+  }, async (request) => {
     const context = request.authContext!;
     const query = approvalRequestListQuerySchema.parse(request.query);
     return service.listApprovalRequests({ ...query, organizationId: context.organizationId });

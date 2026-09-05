@@ -48,7 +48,8 @@ export const getMachineAuthContextFromRequest = async (request: FastifyRequest):
     organizationId: apiKeyRecord.organizationId,
     agentId: apiKeyRecord.agentId,
     actorType: "AGENT",
-    role: "AGENT"
+    role: "AGENT",
+    scopes: apiKeyRecord.scopes
   };
 };
 

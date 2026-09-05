@@ -20,6 +20,7 @@ import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
+import { requireScope } from "../auth/scopes.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
@@ -48,13 +49,17 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   // The QueuedExecutionRunner.enqueue() pushes to BullMQ / SQS / pg-boss.
   const runner = new InProcessExecutionRunner(service);
 
-  app.get("/executions", async (request) => {
+  app.get("/executions", {
+    preHandler: [requireScope("executions:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const query = executionListQuerySchema.parse(request.query);
     return service.list({ ...query, organizationId: context.organizationId });
   });
 
-  app.post("/executions", async (request, reply) => {
+  app.post("/executions", {
+    preHandler: [requireScope("executions:write")]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createExecutionBodySchema, request.body);
 
@@ -81,7 +86,9 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
     return reply.code(201).send(execution);
   });
 
-  app.get("/executions/:id", async (request) => {
+  app.get("/executions/:id", {
+    preHandler: [requireScope("executions:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
     const execution = await service.get({ id: params.id, organizationId: context.organizationId });
@@ -97,21 +104,27 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
     return execution;
   });
 
-  app.patch("/executions/:id", async (request) => {
+  app.patch("/executions/:id", {
+    preHandler: [requireScope("executions:write")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
     const body = validateBody(updateExecutionBodySchema, request.body);
     return service.transition({ organizationId: context.organizationId, id: params.id, ...body });
   });
 
-  app.post("/tool-call-traces", async (request, reply) => {
+  app.post("/tool-call-traces", {
+    preHandler: [requireScope(["executions:write", "traces:write"])]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createToolCallTraceBodySchema, request.body);
     const trace = await service.recordToolCall({ ...body, organizationId: context.organizationId });
     return reply.code(201).send(trace);
   });
 
-  app.patch("/tool-call-traces/:id", async (request) => {
+  app.patch("/tool-call-traces/:id", {
+    preHandler: [requireScope(["executions:write", "traces:write"])]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const params = executionParamsSchema.parse(request.params);
     const body = validateBody(updateToolCallTraceBodySchema, request.body);

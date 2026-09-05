@@ -6,6 +6,7 @@ import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
 import { requireRole } from "../auth/rbac.js";
+import { requireScope } from "../auth/scopes.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
 import { AgentExecutionService } from "../agent-executions/agentExecutionService.js";
@@ -41,13 +42,17 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
   );
 
   // Eval Runs
-  app.get("/eval-runs", async (request) => {
+  app.get("/eval-runs", {
+    preHandler: [requireScope("eval:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const query = evalRunListQuerySchema.parse(request.query);
     return service.list({ ...query, organizationId: context.organizationId });
   });
 
-  app.get("/eval-runs/regression", async (request) => {
+  app.get("/eval-runs/regression", {
+    preHandler: [requireScope("eval:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const query = evalRegressionQuerySchema.parse(request.query);
     return service.getRegressionReport({
@@ -56,7 +61,9 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/eval-runs", async (request, reply) => {
+  app.post("/eval-runs", {
+    preHandler: [requireScope("eval:write")]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createEvalRunBodySchema, request.body);
     const evalRun = await service.create({ ...body, organizationId: context.organizationId });
@@ -73,13 +80,17 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     return reply.code(201).send(evalCase);
   });
 
-  app.get("/eval-cases", async (request) => {
+  app.get("/eval-cases", {
+    preHandler: [requireScope("eval:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const query = evalCaseListQuerySchema.parse(request.query);
     return service.listCases({ ...query, organizationId: context.organizationId });
   });
 
-  app.post("/eval-cases/:id/run", async (request, reply) => {
+  app.post("/eval-cases/:id/run", {
+    preHandler: [requireScope("eval:write")]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const params = request.params as { id: string };
     const evalRun = await service.runCase({
@@ -89,7 +100,9 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     return reply.code(200).send(evalRun);
   });
 
-  app.post("/eval-suites/run", async (request, reply) => {
+  app.post("/eval-suites/run", {
+    preHandler: [requireScope("eval:write")]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(runEvalSuiteBodySchema, request.body);
     const runs = await service.runSuite({

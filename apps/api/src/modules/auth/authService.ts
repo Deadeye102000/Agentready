@@ -11,6 +11,7 @@ export type AuthContext = {
   userId?: string;
   agentId?: string;
   role?: string;
+  scopes?: string[];
 };
 
 export class AuthService {

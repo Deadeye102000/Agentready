@@ -3,6 +3,7 @@ import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireOrgContext } from "../auth/authPlugin.js";
 import { requireRole } from "../auth/rbac.js";
+import { requireScope } from "../auth/scopes.js";
 import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
 import { TaskContractRepository } from "./taskContractRepository.js";
@@ -22,7 +23,9 @@ export async function registerTaskContractRoutes(app: FastifyInstance) {
     new TenancyService(new TenancyRepository(app.prisma))
   );
 
-  app.get("/task-contracts", async (request) => {
+  app.get("/task-contracts", {
+    preHandler: [requireScope("contracts:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const query = taskContractListQuerySchema.parse(request.query);
     return service.list({ ...query, organizationId: context.organizationId });
@@ -41,7 +44,9 @@ export async function registerTaskContractRoutes(app: FastifyInstance) {
     return reply.code(201).send(contract);
   });
 
-  app.get("/task-contracts/:id", async (request) => {
+  app.get("/task-contracts/:id", {
+    preHandler: [requireScope("contracts:read")]
+  }, async (request) => {
     const context = requireOrgContext(request);
     const params = taskContractParamsSchema.parse(request.params);
     const contract = await service.get({ id: params.id, organizationId: context.organizationId });
