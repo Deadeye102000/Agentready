@@ -25,6 +25,7 @@ export const envSchema = z
       .string()
       .url()
       .default("postgresql://agentready:agentready@localhost:5432/agentready?schema=public"),
+    DIRECT_URL: z.string().optional(),
     AUTH_SESSION_SECRET: z.string().min(32).optional(),
     SENTRY_DSN: z.string().url().optional(),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info")

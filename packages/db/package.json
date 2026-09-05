@@ -13,7 +13,8 @@
     "db:validate": "prisma validate --schema ../../prisma/schema.prisma",
     "db:generate": "prisma generate --schema ../../prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema ../../prisma/schema.prisma",
-    "db:seed": "tsx ../../prisma/seed.ts",
+    "db:push": "prisma db push --schema ../../prisma/schema.prisma",
+    "db:seed": "tsx --env-file=../../.env ../../prisma/seed.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

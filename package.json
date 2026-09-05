@@ -16,6 +16,7 @@
     "db:validate": "pnpm --filter @agentready/db db:validate",
     "db:generate": "pnpm --filter @agentready/db db:generate",
     "db:migrate": "pnpm --filter @agentready/db db:migrate",
+    "db:push": "pnpm --filter @agentready/db db:push",
     "db:seed": "pnpm --filter @agentready/db db:seed",
     "postinstall": "pnpm db:generate"
   },

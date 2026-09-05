@@ -13,3 +13,6 @@ packages/db/src/generated/
 pnpm-debug.log*
 *.tsbuildinfo
 graphify-out/
+skills-lock.json
+.agents
+
