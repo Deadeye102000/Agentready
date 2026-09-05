@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { requireRole } from "../auth/rbac.js";
 import type { GovernanceService } from "./governanceService.js";
@@ -27,6 +28,14 @@ export async function registerFeatureFlagRoutes(app: FastifyInstance, service: G
     preHandler: [requireRole(["OWNER", "ADMIN"])]
   }, async (request) => {
     const context = request.authContext!;
+    if (!context.userId) {
+      throw new HttpError({
+        code: "UNAUTHORIZED",
+        message: "A human user session is required to toggle feature flags",
+        statusCode: 401
+      });
+    }
+
     const body = z.object({
       agentId: z.string().nullable().optional(),
       capability: z.string().min(1)

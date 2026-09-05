@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import { requireRole } from "../auth/rbac.js";
 import type { GovernanceService } from "./governanceService.js";
@@ -39,6 +40,14 @@ export async function registerApprovalRoutes(app: FastifyInstance, service: Gove
     preHandler: [requireRole(["OWNER", "ADMIN", "APPROVER"])]
   }, async (request) => {
     const context = request.authContext!;
+    if (!context.userId) {
+      throw new HttpError({
+        code: "UNAUTHORIZED",
+        message: "A human user session is required to review approvals",
+        statusCode: 401
+      });
+    }
+
     const params = approvalRequestParamsSchema.parse(request.params);
     const body = validateBody(reviewApprovalRequestBodySchema, request.body);
 
