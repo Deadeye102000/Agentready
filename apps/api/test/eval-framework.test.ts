@@ -254,4 +254,15 @@ describe("Evaluation Framework Integration Tests", () => {
     });
     assert.equal(res.statusCode, 403);
   });
+
+  it("7. POST /eval-cases/:id/run - rejects invalid/empty id with 400 VALIDATION_ERROR", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/eval-cases/%20/run",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(res.statusCode, 400);
+    const body = JSON.parse(res.body);
+    assert.equal(body.error.code, "VALIDATION_ERROR");
+  });
 });

@@ -31,6 +31,7 @@ import {
   getApiKey,
   DEV_DEFAULT_SANDBOX_AGENT_API_KEY,
 } from "../src/lib/sandboxAuth.js";
+import { POST as sandboxPost } from "../src/app/api/sandbox/route.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -342,6 +343,79 @@ describe("Sandbox Route Production Secret Protection", () => {
     process.env.SANDBOX_AGENT_API_KEY = "ar_live_custom_prod_secret_token";
 
     assert.equal(getApiKey(), "ar_live_custom_prod_secret_token");
+  });
+});
+
+describe("Sandbox Route Schema Validation", () => {
+  it("returns 400 on malformed JSON body", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      body: "not-json{{"
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /Invalid JSON/);
+  });
+
+  it("returns 400 when body is not an object", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(["not", "an", "object"])
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /Validation error/);
+  });
+
+  it("returns 400 when agentType is missing without action", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /Missing agentType parameter/);
+  });
+
+  it("returns 400 when agentType is unknown", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentType: "invalid_agent" })
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /Unknown agentType/);
+  });
+
+  it("returns 400 when action is 'approve' but executionId is missing", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve" })
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /executionId is required/);
+  });
+
+  it("returns 400 when action is unsupported", async () => {
+    const req = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_everything" })
+    });
+    const res = await sandboxPost(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /Invalid action/);
   });
 });
 

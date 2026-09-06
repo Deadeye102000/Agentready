@@ -23,3 +23,7 @@ export const runEvalSuiteBodySchema = z.object({
 export const evalRegressionQuerySchema = z.object({
   contractId: z.string().min(1).optional()
 });
+
+export const runEvalCaseParamsSchema = z.object({
+  id: z.string().trim().min(1, "Case id is required")
+});

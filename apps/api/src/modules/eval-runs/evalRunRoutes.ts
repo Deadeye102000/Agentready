@@ -18,7 +18,8 @@ import {
   createEvalCaseBodySchema,
   evalCaseListQuerySchema,
   runEvalSuiteBodySchema,
-  evalRegressionQuerySchema
+  evalRegressionQuerySchema,
+  runEvalCaseParamsSchema
 } from "./evalRunSchemas.js";
 
 export async function registerEvalRunRoutes(app: FastifyInstance) {
@@ -92,7 +93,7 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     preHandler: [requireScope("eval:write")]
   }, async (request, reply) => {
     const context = requireOrgContext(request);
-    const params = request.params as { id: string };
+    const params = runEvalCaseParamsSchema.parse(request.params);
     const evalRun = await service.runCase({
       organizationId: context.organizationId,
       caseId: params.id

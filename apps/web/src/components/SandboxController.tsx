@@ -16,6 +16,7 @@ export function SandboxController() {
   const [loading, setLoading] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<LogType[]>([]);
   const [sandboxMode, setSandboxMode] = useState<"live" | "simulated" | null>(null);
+  const [sandboxError, setSandboxError] = useState<string | null>(null);
   
   // Scenarios state
   const [finOpsState, setFinOpsState] = useState<{
@@ -61,6 +62,7 @@ export function SandboxController() {
 
   const handleRunAgent = async () => {
     setLoading(true);
+    setSandboxError(null);
     // Reset states
     if (activeTab === "finops") setFinOpsState(null);
     if (activeTab === "rogue") setRogueState(null);
@@ -73,8 +75,15 @@ export function SandboxController() {
         body: JSON.stringify({ agentType: activeTab })
       });
       const data = await res.json();
+
+      if (!res.ok || data.error) {
+        const errMsg = data.error || `HTTP ${res.status}: Failed to execute sandbox run`;
+        setSandboxError(errMsg);
+        addLog("POST", `/api/sandbox?agentType=${activeTab}`, res.status, data, "live");
+        return;
+      }
       
-      const mode = data.mode || "simulated";
+      const mode = data.mode || "live";
       setSandboxMode(mode);
       addLog("POST", `/api/sandbox?agentType=${activeTab}`, res.status, data, mode);
 
@@ -86,7 +95,8 @@ export function SandboxController() {
         setEvalState({ ...data, mode });
       }
     } catch (err: any) {
-      addLog("POST", `/api/sandbox?agentType=${activeTab}`, 500, { error: err.message }, "simulated");
+      setSandboxError(err.message || "Network error communicating with sandbox backend");
+      addLog("POST", `/api/sandbox?agentType=${activeTab}`, 500, { error: err.message }, "live");
     } finally {
       setLoading(false);
     }
@@ -95,6 +105,7 @@ export function SandboxController() {
   const handleApproveRefund = async () => {
     if (!finOpsState?.id) return;
     setLoading(true);
+    setSandboxError(null);
     try {
       const res = await fetch("/api/sandbox", {
         method: "POST",
@@ -103,7 +114,14 @@ export function SandboxController() {
       });
       const data = await res.json();
 
-      const mode = data.mode || "simulated";
+      if (!res.ok || data.error) {
+        const errMsg = data.error || `HTTP ${res.status}: Failed to approve request`;
+        setSandboxError(errMsg);
+        addLog("POST", `/api/sandbox?action=approve`, res.status, data, "live");
+        return;
+      }
+
+      const mode = data.mode || "live";
       setSandboxMode(mode);
       addLog("POST", `/api/sandbox?action=approve`, res.status, data, mode);
       
@@ -114,7 +132,8 @@ export function SandboxController() {
         });
       }
     } catch (err: any) {
-      addLog("POST", "/api/sandbox?action=approve", 500, { error: err.message }, "simulated");
+      setSandboxError(err.message || "Network error approving refund request");
+      addLog("POST", "/api/sandbox?action=approve", 500, { error: err.message }, "live");
     } finally {
       setLoading(false);
     }
@@ -164,6 +183,17 @@ export function SandboxController() {
       {/* Workspace Panel */}
       <div className="devSandboxBody">
         <div className="devSandboxMainPanel">
+          {sandboxError && (
+            <div className="sandboxBanner danger" role="alert" style={{ marginBottom: "16px" }}>
+              <div className="bannerHeader">
+                <span className="bannerIcon">⚠️</span>
+                <div>
+                  <span className="bannerTitle">Sandbox Backend Error</span>
+                  <p className="bannerDesc">{sandboxError}</p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Tab 1: FinOps */}
           {activeTab === "finops" && (
