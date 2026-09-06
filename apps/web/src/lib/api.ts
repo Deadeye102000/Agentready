@@ -623,3 +623,345 @@ export async function reviewApprovalRequest(
   }
 }
 
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+export type AuditLogItem = {
+  id: string;
+  organizationId: string;
+  actorType: "USER" | "AGENT" | "SYSTEM";
+  actorUserId: string | null;
+  actorAgentId: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadata: any;
+  createdAt: string;
+  actorUser?: { id: string; email: string; name: string | null } | null;
+  actorAgent?: { id: string; name: string } | null;
+};
+
+export async function fetchAuditLogs(
+  limit = 100,
+  cookieHeader?: string
+): Promise<ApiResult<AuditLogItem[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+    const res = await fetch(`${apiBaseUrl}/api/v1/audit-logs?limit=${limit}`, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+    const data = (await res.json()) as AuditLogItem[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
+// ─── API Keys ─────────────────────────────────────────────────────────────────
+
+export type ApiKeyItem = {
+  id: string;
+  organizationId: string;
+  agentId: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreatedApiKeyResponse = {
+  rawKey: string;
+  apiKeyRecord: ApiKeyItem;
+};
+
+export async function fetchApiKeys(
+  cookieHeader?: string
+): Promise<ApiResult<ApiKeyItem[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+    const res = await fetch(`${apiBaseUrl}/api/v1/api-keys`, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+    const data = (await res.json()) as ApiKeyItem[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
+export async function createApiKey(
+  input: { name: string; scopes?: string[] }
+): Promise<{ data: CreatedApiKeyResponse | null; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/api-keys`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { data: null, error: (body as any)?.error?.message || (body as any)?.message || `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as CreatedApiKeyResponse;
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message || "Network error" };
+  }
+}
+
+export async function revokeApiKey(
+  id: string
+): Promise<{ ok: boolean; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/api-keys/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: (body as any)?.error?.message || (body as any)?.message || `HTTP ${res.status}` };
+    }
+    return { ok: true, error: null };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Network error" };
+  }
+}
+
+// ─── Task Contracts ───────────────────────────────────────────────────────────
+
+export type TaskContractItem = {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  version: number;
+  allowedTools: string[];
+  requiredApprovals: string[];
+  riskThreshold: number;
+  inputSchema: any;
+  outputSchema: any;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function fetchTaskContracts(
+  cookieHeader?: string
+): Promise<ApiResult<TaskContractItem[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+    const res = await fetch(`${apiBaseUrl}/api/v1/task-contracts`, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+    const data = (await res.json()) as TaskContractItem[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
+export async function createTaskContract(
+  input: {
+    name: string;
+    description?: string;
+    version?: number;
+    allowedTools: string[];
+    requiredApprovals: string[];
+    riskThreshold?: number;
+    inputSchema?: any;
+    outputSchema?: any;
+  }
+): Promise<{ data: TaskContractItem | null; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/task-contracts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { data: null, error: (body as any)?.error?.message || (body as any)?.message || `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as TaskContractItem;
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message || "Network error" };
+  }
+}
+
+// ─── Eval Suites ──────────────────────────────────────────────────────────────
+
+export type EvalCaseItem = {
+  id: string;
+  organizationId: string;
+  taskContractId: string;
+  name: string;
+  description: string | null;
+  inputPayload: any;
+  expectedStatus: string;
+  assertions: any;
+  createdAt: string;
+  updatedAt: string;
+  taskContract?: { id: string; name: string; version: number };
+};
+
+export type EvalRunItem = {
+  id: string;
+  organizationId: string;
+  taskContractId: string;
+  executionId: string;
+  evalCaseId: string | null;
+  status: string;
+  score: number | null;
+  threshold: number;
+  assertionResults: any;
+  createdAt: string;
+  completedAt: string | null;
+  contract?: { id: string; name: string; version: number };
+  execution?: { id: string; objective: string; status: string };
+};
+
+export async function fetchEvalCases(
+  cookieHeader?: string
+): Promise<ApiResult<EvalCaseItem[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+    const res = await fetch(`${apiBaseUrl}/api/v1/eval-cases`, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+    const data = (await res.json()) as EvalCaseItem[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
+export async function fetchEvalRuns(
+  cookieHeader?: string
+): Promise<ApiResult<EvalRunItem[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+    const res = await fetch(`${apiBaseUrl}/api/v1/eval-runs`, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+    const data = (await res.json()) as EvalRunItem[];
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
+export async function runEvalCase(
+  caseId: string
+): Promise<{ data: any | null; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/eval-cases/${caseId}/run`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { data: null, error: (body as any)?.error?.message || (body as any)?.message || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message || "Network error" };
+  }
+}
+
+

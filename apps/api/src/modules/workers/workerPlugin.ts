@@ -1,20 +1,24 @@
 import type { FastifyInstance } from "fastify";
 import { ExecutionRunnerService } from "./executionRunner.service.js";
+import { IdempotencyPurgeService } from "./idempotencyPurge.service.js";
 import { AuditService } from "../audit/auditService.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     executionRunner?: ExecutionRunnerService;
+    idempotencyPurge?: IdempotencyPurgeService;
   }
 }
 
 export async function workerPlugin(app: FastifyInstance) {
   const auditService = new AuditService(new AuditRepository(app.prisma));
   const runner = new ExecutionRunnerService(app.prisma, auditService);
+  const idempotencyPurge = new IdempotencyPurgeService(app.prisma, auditService, app.log);
 
   // Expose on the app instance
   app.executionRunner = runner;
+  app.idempotencyPurge = idempotencyPurge;
 
   // Hook into Fastify server lifecycle hooks
   app.addHook("onReady", async () => {
@@ -27,11 +31,16 @@ export async function workerPlugin(app: FastifyInstance) {
     }
     app.log.info("[Worker Plugin] Starting background execution runner...");
     runner.start();
+    app.log.info("[Worker Plugin] Starting background idempotency purge service...");
+    idempotencyPurge.start();
   });
 
   // onClose runs when the Fastify server is closing
   app.addHook("onClose", async (instance) => {
     instance.log.info("[Worker Plugin] Stopping background execution runner...");
     runner.stop();
+    instance.log.info("[Worker Plugin] Stopping background idempotency purge service...");
+    idempotencyPurge.stop();
   });
 }
+

@@ -8,14 +8,14 @@ export function Navbar({ orgName }: { orgName?: string }) {
 
   const navItems = [
     { label: "Overview", href: "/" },
-    { label: "Agents", href: "/agents" },
     { label: "Task Contracts", href: "/task-contracts" },
     { label: "Executions", href: "/executions" },
     { label: "Traces", href: "/traces" },
-    { label: "Evals", href: "/evals" },
     { label: "Approval Queue", href: "/approval-queue" },
     { label: "Feature Flags", href: "/feature-flags" },
     { label: "Audit Logs", href: "/audit-logs" },
+    { label: "API Keys", href: "/api-keys" },
+    { label: "Evals", href: "/evals" },
     { label: "MCP", href: "/mcp" }
   ];
 

@@ -750,6 +750,22 @@ mockPrisma.idempotencyKey.create = async (args: any) => {
   return record;
 };
 
+mockPrisma.idempotencyKey.deleteMany = async (args: any) => {
+  const where = args?.where;
+  const initialCount = mockStore.idempotencyKeys.length;
+  mockStore.idempotencyKeys = mockStore.idempotencyKeys.filter((k) => {
+    if (where?.expiresAt?.lte) {
+      if (new Date(k.expiresAt) <= new Date(where.expiresAt.lte)) return false;
+    }
+    if (where?.organizationId && k.organizationId !== where.organizationId) {
+      return true;
+    }
+    return true;
+  });
+  return { count: initialCount - mockStore.idempotencyKeys.length };
+};
+
+
 // Eval Cases
 mockPrisma.evalCase.create = async (args: any) => {
   const data = args.data;
@@ -960,3 +976,6 @@ mockPrisma.mcpServerRegistration = {
     );
   }
 };
+
+export { mockPrisma };
+

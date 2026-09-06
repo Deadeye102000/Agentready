@@ -457,3 +457,86 @@ describe("Sandbox Route Schema Validation", () => {
   });
 });
 
+describe("New Management & Observability UI Data Contracts", () => {
+  it("API client functions are defined and return typed ApiResult", async () => {
+    const {
+      fetchAuditLogs,
+      fetchApiKeys,
+      createApiKey,
+      revokeApiKey,
+      fetchTaskContracts,
+      createTaskContract,
+      fetchEvalCases,
+      fetchEvalRuns,
+      runEvalCase
+    } = await import("../src/lib/api.js");
+
+    assert.equal(typeof fetchAuditLogs, "function");
+    assert.equal(typeof fetchApiKeys, "function");
+    assert.equal(typeof createApiKey, "function");
+    assert.equal(typeof revokeApiKey, "function");
+    assert.equal(typeof fetchTaskContracts, "function");
+    assert.equal(typeof createTaskContract, "function");
+    assert.equal(typeof fetchEvalCases, "function");
+    assert.equal(typeof fetchEvalRuns, "function");
+    assert.equal(typeof runEvalCase, "function");
+  });
+
+  it("fetchAuditLogs returns error ApiResult without silent mock fallback on failure", async () => {
+    const { fetchAuditLogs } = await import("../src/lib/api.js");
+    const originalEnv = process.env.AGENTREADY_API_URL;
+    process.env.AGENTREADY_API_URL = "http://127.0.0.1:1";
+    try {
+      const result = await fetchAuditLogs(10);
+      assert.equal(result.data, null);
+      assert.ok(result.error);
+      assert.equal(result.isFallback, false);
+    } finally {
+      process.env.AGENTREADY_API_URL = originalEnv;
+    }
+  });
+
+  it("fetchApiKeys returns error ApiResult without silent mock fallback on failure", async () => {
+    const { fetchApiKeys } = await import("../src/lib/api.js");
+    const originalEnv = process.env.AGENTREADY_API_URL;
+    process.env.AGENTREADY_API_URL = "http://127.0.0.1:1";
+    try {
+      const result = await fetchApiKeys();
+      assert.equal(result.data, null);
+      assert.ok(result.error);
+      assert.equal(result.isFallback, false);
+    } finally {
+      process.env.AGENTREADY_API_URL = originalEnv;
+    }
+  });
+
+  it("fetchTaskContracts returns error ApiResult without silent mock fallback on failure", async () => {
+    const { fetchTaskContracts } = await import("../src/lib/api.js");
+    const originalEnv = process.env.AGENTREADY_API_URL;
+    process.env.AGENTREADY_API_URL = "http://127.0.0.1:1";
+    try {
+      const result = await fetchTaskContracts();
+      assert.equal(result.data, null);
+      assert.ok(result.error);
+      assert.equal(result.isFallback, false);
+    } finally {
+      process.env.AGENTREADY_API_URL = originalEnv;
+    }
+  });
+
+  it("fetchEvalCases returns error ApiResult without silent mock fallback on failure", async () => {
+    const { fetchEvalCases } = await import("../src/lib/api.js");
+    const originalEnv = process.env.AGENTREADY_API_URL;
+    process.env.AGENTREADY_API_URL = "http://127.0.0.1:1";
+    try {
+      const result = await fetchEvalCases();
+      assert.equal(result.data, null);
+      assert.ok(result.error);
+      assert.equal(result.isFallback, false);
+    } finally {
+      process.env.AGENTREADY_API_URL = originalEnv;
+    }
+  });
+});
+
+
