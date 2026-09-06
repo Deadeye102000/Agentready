@@ -57,6 +57,23 @@ export async function buildServer(options?: { prisma?: any }) {
 
   registerErrorHandlers(app);
 
+  app.addHook("onReady", async () => {
+    if (
+      process.env.NODE_ENV === "test" ||
+      process.env.NODE_TEST_CONTEXT !== undefined ||
+      process.execArgv.includes("--test")
+    ) {
+      return;
+    }
+    try {
+      await app.prisma.$connect();
+      app.log.info("Database connection established successfully.");
+    } catch (err: any) {
+      app.log.error({ err }, "Database connection failed on startup.");
+      throw err;
+    }
+  });
+
   await registerHealthRoutes(app);
   await app.register(registerV1Routes, { prefix: "/api/v1" });
 

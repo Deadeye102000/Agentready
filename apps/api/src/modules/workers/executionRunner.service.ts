@@ -89,18 +89,24 @@ export class ExecutionRunnerService {
         });
 
         // 5. Invoke Agent Execution Harness / Webhook
-        const webhookUrl = process.env.AGENT_RUNNER_WEBHOOK_URL;
-        const isProduction = process.env.NODE_ENV === "production";
+        const rawWebhookUrl = process.env.AGENT_RUNNER_WEBHOOK_URL;
+        const webhookUrl = rawWebhookUrl && rawWebhookUrl.trim() !== "" ? rawWebhookUrl.trim() : undefined;
 
-        if (isProduction && !webhookUrl) {
-          // In production, a missing webhook URL must fail the execution immediately
+        if (!webhookUrl) {
+          // In all environments (production, development, test), a missing webhook URL
+          // must fail the execution immediately and loudly with a clear configuration error
+          // rather than hanging in RUNNING state indefinitely.
+          const failureReason = "CONFIG_ERROR: AGENT_RUNNER_WEBHOOK_URL is not configured";
           await this.prisma.agentExecution.update({
             where: { id: exec.id },
             data: {
               status: "FAILED",
-              failureReason: "RUNNER_ERROR",
+              failureReason,
               completedAt: new Date(),
-              output: { error: "AGENT_RUNNER_WEBHOOK_URL is required in production but not configured" }
+              output: {
+                error:
+                  "AGENT_RUNNER_WEBHOOK_URL is required to dispatch executions, but is not configured in the environment."
+              }
             }
           });
           await this.auditService.record({
@@ -110,14 +116,16 @@ export class ExecutionRunnerService {
             resourceType: "AgentExecution",
             resourceId: exec.id,
             before: { status: "RUNNING" },
-            after: { status: "FAILED", failureReason: "RUNNER_ERROR" },
-            metadata: { error: "Missing AGENT_RUNNER_WEBHOOK_URL in production" }
+            after: { status: "FAILED", failureReason },
+            metadata: {
+              error:
+                "Missing AGENT_RUNNER_WEBHOOK_URL environment variable across all environments"
+            }
           });
           continue;
         }
 
-        if (webhookUrl) {
-          const contract = exec.contractId
+        const contract = exec.contractId
             ? await this.prisma.taskContract.findUnique({ where: { id: exec.contractId } })
             : null;
 
@@ -197,9 +205,8 @@ export class ExecutionRunnerService {
               }
             });
           }
-        }
 
-      } catch (err: any) {
+        } catch (err: any) {
         console.error(`[Worker] Error processing execution ${exec.id}: ${err.message}`);
       }
     }

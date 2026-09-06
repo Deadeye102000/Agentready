@@ -49,13 +49,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   );
 
   app.post("/auth/logout", async (request, reply) => {
-    const context = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+    const context = await getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
     const cookie = await service.logout(context);
     return reply.header("Set-Cookie", cookie).send({ ok: true });
   });
 
   app.get("/auth/me", async (request) => {
-    request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+    request.authContext = await getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
     return service.currentUser(requireAuth(request));
   });
 }

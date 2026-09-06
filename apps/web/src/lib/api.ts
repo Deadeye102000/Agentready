@@ -236,12 +236,18 @@ const getApiBaseUrl = () => {
   return process.env.AGENTREADY_API_URL || "http://localhost:3001";
 };
 
-export async function fetchDashboardData(): Promise<ApiResult<DashboardData>> {
+export async function fetchDashboardData(cookieHeader?: string): Promise<ApiResult<DashboardData>> {
   const apiBaseUrl = getApiBaseUrl();
 
   try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
     const res = await fetch(`${apiBaseUrl}/api/v1/observability/dashboard`, {
       cache: "no-store",
+      headers,
     });
 
     if (!res.ok) {
@@ -263,12 +269,18 @@ export async function fetchDashboardData(): Promise<ApiResult<DashboardData>> {
   }
 }
 
-export async function fetchRegressionData(): Promise<ApiResult<RegressionData>> {
+export async function fetchRegressionData(cookieHeader?: string): Promise<ApiResult<RegressionData>> {
   const apiBaseUrl = getApiBaseUrl();
 
   try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
     const res = await fetch(`${apiBaseUrl}/api/v1/eval-runs/regression`, {
       cache: "no-store",
+      headers,
     });
 
     if (!res.ok) {
@@ -393,12 +405,21 @@ export const fallbackExecutionDetail: ExecutionDetailData = {
   evalRuns: []
 };
 
-export async function fetchExecutionDetail(id: string): Promise<ApiResult<ExecutionDetailData>> {
+export async function fetchExecutionDetail(
+  id: string,
+  cookieHeader?: string
+): Promise<ApiResult<ExecutionDetailData>> {
   const apiBaseUrl = getApiBaseUrl();
 
   try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
     const res = await fetch(`${apiBaseUrl}/api/v1/executions/${id}`, {
       cache: "no-store",
+      headers,
     });
 
     if (!res.ok) {
@@ -447,7 +468,8 @@ export type PaginatedTracesResponse = {
 export async function fetchToolCallTraces(
   executionId?: string,
   page = 1,
-  limit = 50
+  limit = 50,
+  cookieHeader?: string
 ): Promise<ApiResult<PaginatedTracesResponse>> {
   const apiBaseUrl = getApiBaseUrl();
   const query = new URLSearchParams();
@@ -456,8 +478,14 @@ export async function fetchToolCallTraces(
   query.set("limit", String(limit));
 
   try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
     const res = await fetch(`${apiBaseUrl}/api/v1/tool-call-traces?${query.toString()}`, {
       cache: "no-store",
+      headers,
     });
 
     if (!res.ok) {
@@ -538,24 +566,36 @@ export const fallbackApprovalRequests: ApprovalRequest[] = [
 const getClientApiBaseUrl = () =>
   process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
 
-export async function fetchApprovalRequests(status?: string): Promise<ApiResult<ApprovalRequest[]>> {
+export async function fetchApprovalRequests(
+  status?: string,
+  cookieHeader?: string
+): Promise<ApiResult<ApprovalRequest[]>> {
   const base = getClientApiBaseUrl();
   const url = status
     ? `${base}/api/v1/approval-requests?status=${status}`
     : `${base}/api/v1/approval-requests`;
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
+    const res = await fetch(url, {
+      cache: "no-store",
+      credentials: "include",
+      headers,
+    });
     if (!res.ok) {
-      return { data: fallbackApprovalRequests, error: `HTTP ${res.status}: ${res.statusText}`, isFallback: true };
+      return { data: null, error: `API returned HTTP ${res.status}: ${res.statusText}`, isFallback: false };
     }
     const data = (await res.json()) as ApprovalRequest[];
     return { data, error: null, isFallback: false };
   } catch (err: any) {
     return {
-      data: fallbackApprovalRequests,
+      data: null,
       error: err?.message || "Failed to connect to AgentReady API server",
-      isFallback: true,
+      isFallback: false,
     };
   }
 }

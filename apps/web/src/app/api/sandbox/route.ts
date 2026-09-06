@@ -4,6 +4,10 @@ import { handleApproveScenario } from "../../../lib/sandbox/scenarios/approve";
 import { handleFinopsScenario } from "../../../lib/sandbox/scenarios/finops";
 import { handleRogueScenario } from "../../../lib/sandbox/scenarios/rogue";
 import { handleEvalScenario } from "../../../lib/sandbox/scenarios/eval";
+import {
+  checkSandboxRateLimit,
+  SANDBOX_RATE_LIMIT_MAX
+} from "../../../lib/sandbox/rateLimit.js";
 
 const sandboxBodySchema = z
   .object({
@@ -44,6 +48,26 @@ const sandboxBodySchema = z
   });
 
 export async function POST(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const clientIp = forwardedFor
+    ? forwardedFor.split(",")[0].trim()
+    : request.headers.get("x-real-ip") || "127.0.0.1";
+
+  const { allowed, retryAfter } = checkSandboxRateLimit(clientIp);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(retryAfter),
+          "X-RateLimit-Limit": String(SANDBOX_RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": "0"
+        }
+      }
+    );
+  }
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();

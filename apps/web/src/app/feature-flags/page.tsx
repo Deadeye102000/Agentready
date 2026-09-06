@@ -44,7 +44,7 @@ const defaultCapabilities = [
 ];
 
 async function getFeatureFlags(): Promise<{ organization: OrgDetails | null; flags: FeatureFlag[] }> {
-  const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:4000";
+  const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:3001";
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 

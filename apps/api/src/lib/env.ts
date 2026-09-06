@@ -1,4 +1,25 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { z } from "zod";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly discover and load the monorepo root .env file
+const candidates = [
+  path.resolve(__dirname, "../../../../.env"),
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "../../.env")
+];
+
+for (const candidate of candidates) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+    break;
+  }
+}
 
 export const DEV_DEFAULT_AUTH_SESSION_SECRET = "development-auth-session-secret-change-me";
 
@@ -28,7 +49,23 @@ export const envSchema = z
     DIRECT_URL: z.string().optional(),
     AUTH_SESSION_SECRET: z.string().min(32).optional(),
     SENTRY_DSN: z.string().url().optional(),
-    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info")
+    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+    AGENT_RUNNER_WEBHOOK_URL: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim() !== "" ? val.trim() : undefined))
+      .refine(
+        (val) => {
+          if (!val) return true;
+          try {
+            new URL(val);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        { message: "AGENT_RUNNER_WEBHOOK_URL must be a valid URL" }
+      )
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

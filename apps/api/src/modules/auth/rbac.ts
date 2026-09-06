@@ -13,29 +13,15 @@ export const requireRole = (allowedRoles: SystemRole[]) => {
       });
     }
 
-    let userRole = request.authContext.role as SystemRole | undefined;
-
-    if (!userRole) {
-      const member = await request.server.prisma.organizationMember.findFirst({
-        where: {
-          userId: request.authContext.userId,
-          organizationId: request.authContext.organizationId
-        }
-      });
-
-      userRole = member?.role as SystemRole | undefined;
-      if (userRole) {
-        request.authContext.role = userRole;
-      }
-    }
-
-    if (!userRole) {
+    if (request.authContext.actorType !== "USER") {
       throw new HttpError({
         code: "FORBIDDEN",
-        message: "User is not a member of this organization.",
+        message: "You do not have permission to perform this action.",
         statusCode: 403
       });
     }
+
+    const userRole = request.authContext.role;
 
     if (!allowedRoles.includes(userRole)) {
       request.log.warn({ userRole, allowedRoles }, "RBAC Check Failed: Insufficient permissions");

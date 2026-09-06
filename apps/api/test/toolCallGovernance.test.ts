@@ -135,7 +135,7 @@ describe("Synchronous Tool Call Governance & Lifecycle Integration Tests", () =>
     });
     assert.equal(checkRes.statusCode, 403);
 
-    // 2. Calling /result with session cookie gets 401 (machine auth required)
+    // 2. Calling /result with human session cookie gets 403 (machine auth required; human sessions rejected)
     const cookie = getSessionCookie("user-1", "org-1");
     const resultRes = await app.inject({
       method: "POST",
@@ -143,7 +143,15 @@ describe("Synchronous Tool Call Governance & Lifecycle Integration Tests", () =>
       headers: { cookie },
       payload: { status: "SUCCEEDED" }
     });
-    assert.equal(resultRes.statusCode, 401);
+    assert.equal(resultRes.statusCode, 403);
+
+    // 3. Calling /result without any auth gets 401 (unauthenticated)
+    const noAuthRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/tool-calls/trace-1/result",
+      payload: { status: "SUCCEEDED" }
+    });
+    assert.equal(noAuthRes.statusCode, 401);
   });
 
   it("enforces single-flight tool calls per execution (409 Conflict when a PENDING trace exists)", async () => {

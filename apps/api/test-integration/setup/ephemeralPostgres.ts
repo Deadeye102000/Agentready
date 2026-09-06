@@ -1,11 +1,20 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { PrismaClient } from "@agentready/db";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(__dirname, "../../../../prisma/schema.prisma");
+const localPrismaBin = path.resolve(__dirname, "../../../../node_modules/.bin/prisma");
+const localPrismaJs = path.resolve(__dirname, "../../../../node_modules/prisma/build/index.js");
+
+const prismaExecutable = fs.existsSync(localPrismaBin)
+  ? `"${localPrismaBin}"`
+  : fs.existsSync(localPrismaJs)
+    ? `"${process.execPath}" "${localPrismaJs}"`
+    : "pnpm exec prisma";
 
 export const CONCURRENCY_WORKER_COUNT = 10;
 export const CONNECTION_LIMIT = 20; // Explicitly >= worker count to force genuinely parallel connections
@@ -44,11 +53,16 @@ export async function setupEphemeralPostgres(): Promise<EphemeralPostgresContext
   process.env.DATABASE_URL = connectionUrl;
   process.env.DIRECT_URL = connectionUrl;
 
-  // Synchronize database schema using prisma db push
-  execSync(`npx prisma db push --schema "${schemaPath}" --skip-generate`, {
+  const nodeBinDir = path.dirname(process.execPath);
+  const rootBinDir = path.resolve(__dirname, "../../../../node_modules/.bin");
+  const envPath = [rootBinDir, nodeBinDir, process.env.PATH].filter(Boolean).join(":");
+
+  // Synchronize database schema using direct prisma executable
+  execSync(`${prismaExecutable} db push --schema "${schemaPath}" --skip-generate`, {
     stdio: "pipe",
     env: {
       ...process.env,
+      PATH: envPath,
       DATABASE_URL: connectionUrl,
       DIRECT_URL: connectionUrl,
     },

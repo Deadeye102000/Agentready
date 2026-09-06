@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { Navbar } from "../../components/Navbar";
 import {
   type ApprovalRequest,
-  fallbackApprovalRequests,
   reviewApprovalRequest
 } from "../../lib/api";
 
@@ -306,7 +305,6 @@ export default function ApprovalQueuePage() {
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [isFallback, setIsFallback] = useState(false);
   const [filter, setFilter] = useState<"PENDING" | "ALL">("PENDING");
 
   async function load(showAll: boolean) {
@@ -319,19 +317,19 @@ export default function ApprovalQueuePage() {
       : `${base}/api/v1/approval-requests?status=PENDING`;
 
     try {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, {
+        cache: "no-store",
+        credentials: "include",
+      });
       if (!res.ok) {
-        setRequests(fallbackApprovalRequests);
-        setIsFallback(true);
+        setRequests([]);
         setApiError(`API returned HTTP ${res.status}: ${res.statusText}`);
       } else {
-        const data = await res.json() as ApprovalRequest[];
+        const data = (await res.json()) as ApprovalRequest[];
         setRequests(data);
-        setIsFallback(false);
       }
     } catch (err: any) {
-      setRequests(fallbackApprovalRequests);
-      setIsFallback(true);
+      setRequests([]);
       setApiError(err?.message || "Failed to connect to AgentReady API server");
     }
 
@@ -382,13 +380,13 @@ export default function ApprovalQueuePage() {
         </div>
 
         {/* Error banner */}
-        {isFallback && apiError && (
+        {apiError && (
           <div className="errorBanner" style={{ marginBottom: "20px" }} role="alert">
             <div className="errorContent">
               <div className="errorIcon">!</div>
               <div className="errorText">
-                <strong>API Connection Alert</strong>
-                <span>{apiError} — Showing demo fallback data.</span>
+                <strong>Error Loading Approval Queue</strong>
+                <span>{apiError}</span>
               </div>
             </div>
           </div>
@@ -421,6 +419,37 @@ export default function ApprovalQueuePage() {
                 <div className="skeleton" style={{ height: "14px", width: "30%" }} />
               </div>
             ))}
+          </div>
+        ) : apiError ? (
+          <div
+            className="panel wide"
+            style={{
+              borderLeft: "5px solid #ef4444",
+              padding: "32px",
+              display: "flex",
+              gap: "16px",
+              alignItems: "flex-start",
+            }}
+            role="alert"
+          >
+            <div style={{ fontSize: "2rem", lineHeight: 1 }}>⚠️</div>
+            <div style={{ flex: 1 }}>
+              <span className="pill bad" style={{ marginBottom: "8px", display: "inline-block" }}>
+                Queue Load Error
+              </span>
+              <h2 style={{ fontSize: "1.25rem", fontWeight: "700", margin: "4px 0 8px 0" }}>
+                Unable to load approval requests
+              </h2>
+              <p style={{ color: "#475569", margin: "0 0 16px 0", fontSize: "0.95rem", lineHeight: 1.5 }}>
+                {apiError}
+              </p>
+              <button
+                onClick={() => load(filter === "ALL")}
+                className="retryBtn"
+              >
+                ↻ Retry Loading
+              </button>
+            </div>
           </div>
         ) : requests.length === 0 ? (
           <div className="panel" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "280px", textAlign: "center" }}>

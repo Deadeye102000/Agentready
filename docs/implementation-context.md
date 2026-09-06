@@ -170,33 +170,33 @@ graph TD
 | Executions | GET | `/api/v1/executions/:id` | Get execution detail |
 | Executions | PATCH | `/api/v1/executions/:id` | Update execution status |
 | Tool Governance | POST | `/api/v1/executions/:id/tool-calls/check` | Synchronous pre-flight tool check (ALLOW/BLOCK/WAIT_FOR_APPROVAL, single-flight, circuit breaker, idempotency) |
-| Tool Governance | POST | `/api/v1/tool-calls/:traceId/result` | Report tool execution result (machine-auth only, PENDING to SUCCEEDED/FAILED, state-based idempotency) |
-| Tool Traces | GET | `/api/v1/tool-call-traces` | List tool traces (with pagination & execution filtering) |
-| Tool Traces | POST | `/api/v1/tool-call-traces` | Record per-step tool trace event |
-| Tool Traces | PATCH | `/api/v1/tool-call-traces/:id` | Update per-step tool trace |
-| Contracts | POST | `/api/v1/task-contracts` | Create task contract (OWNER/ADMIN only) |
-| Contracts | GET | `/api/v1/task-contracts` | List task contracts (Session / Agent) |
-| Contracts | GET | `/api/v1/task-contracts/:id` | Get contract by ID (Session / Agent) |
-| Governance | GET | `/api/v1/approval-gates` | List approval gates |
-| Governance | PUT | `/api/v1/approval-gates` | Upsert approval gate (OWNER/ADMIN) |
-| Governance | GET | `/api/v1/feature-flags` | List feature flags |
-| Governance | PUT | `/api/v1/feature-flags` | Upsert feature flag (OWNER/ADMIN) |
-| Governance | POST | `/api/v1/feature-flags/toggle` | Toggle feature flag state (OWNER/ADMIN) |
-| Governance | GET | `/api/v1/approval-requests` | List approval requests |
-| Governance | POST | `/api/v1/approval-requests/:id/review` | Approve or reject request (OWNER/ADMIN/APPROVER) |
-| Governance | GET | `/api/v1/mcp-servers` | List MCP server registrations |
-| Evals | POST | `/api/v1/eval-runs` | Create eval run (eval:write) |
-| Evals | GET | `/api/v1/eval-runs` | List eval runs (eval:read) |
-| Evals | GET | `/api/v1/eval-runs/regression` | Regression comparison data (eval:read) |
-| Eval Cases | POST | `/api/v1/eval-cases` | Create eval case (OWNER/ADMIN only) |
-| Eval Cases | GET | `/api/v1/eval-cases` | List eval cases |
-| Eval Cases | POST | `/api/v1/eval-cases/:id/run` | Run single eval case |
-| Eval Cases | POST | `/api/v1/eval-suites/run` | Run entire eval suite |
-| Observability | GET | `/api/v1/observability/dashboard` | Aggregated dashboard metrics |
-| Audit | GET | `/api/v1/audit-logs` | List audit logs |
-| API Keys | POST | `/api/v1/api-keys` | Create API key (OWNER/ADMIN) |
-| API Keys | GET | `/api/v1/api-keys` | List API keys (OWNER/ADMIN) |
-| API Keys | DELETE | `/api/v1/api-keys/:id` | Revoke API key (OWNER/ADMIN) |
+| Tool Governance | POST | `/api/v1/tool-calls/:traceId/result` | Report tool execution result (Machine API Key only, human sessions not permitted) |
+| Tool Traces | GET | `/api/v1/tool-call-traces` | List tool traces (with pagination & execution filtering; Session / Agent) |
+| Tool Traces | POST | `/api/v1/tool-call-traces` | Record per-step tool trace event (Session: Member+ / Agent: traces:write) |
+| Tool Traces | PATCH | `/api/v1/tool-call-traces/:id` | Update per-step tool trace (Session: Member+ / Agent: traces:write) |
+| Contracts | POST | `/api/v1/task-contracts` | Create task contract (Session: OWNER/ADMIN only, API keys not permitted) |
+| Contracts | GET | `/api/v1/task-contracts` | List task contracts (Session / Agent: contracts:read) |
+| Contracts | GET | `/api/v1/task-contracts/:id` | Get contract by ID (Session / Agent: contracts:read) |
+| Governance | GET | `/api/v1/approval-gates` | List approval gates (Session / Agent: governance:read) |
+| Governance | PUT | `/api/v1/approval-gates` | Upsert approval gate (Session: OWNER/ADMIN only, API keys not permitted) |
+| Governance | GET | `/api/v1/feature-flags` | List feature flags (Session / Agent: governance:read) |
+| Governance | PUT | `/api/v1/feature-flags` | Upsert feature flag (Session: OWNER/ADMIN only, API keys not permitted) |
+| Governance | POST | `/api/v1/feature-flags/toggle` | Toggle feature flag state (Session: OWNER/ADMIN only, API keys not permitted) |
+| Governance | GET | `/api/v1/approval-requests` | List approval requests (Session) |
+| Governance | POST | `/api/v1/approval-requests/:id/review` | Approve or reject request (Session: OWNER/ADMIN/APPROVER only, API keys not permitted) |
+| Governance | GET | `/api/v1/mcp-servers` | List MCP server registrations (Session / Agent: governance:read) |
+| Evals | POST | `/api/v1/eval-runs` | Create eval run (Session: Member+ / Agent: eval:write) |
+| Evals | GET | `/api/v1/eval-runs` | List eval runs (Session / Agent: eval:read) |
+| Evals | GET | `/api/v1/eval-runs/regression` | Regression comparison data (Session / Agent: eval:read) |
+| Eval Cases | POST | `/api/v1/eval-cases` | Create eval case (Session: OWNER/ADMIN only, API keys not permitted) |
+| Eval Cases | GET | `/api/v1/eval-cases` | List eval cases (Session / Agent: eval:read) |
+| Eval Cases | POST | `/api/v1/eval-cases/:id/run` | Run single eval case (Session: Member+ / Agent: eval:write) |
+| Eval Cases | POST | `/api/v1/eval-suites/run` | Run entire eval suite (Session: Member+ / Agent: eval:write) |
+| Observability | GET | `/api/v1/observability/dashboard` | Aggregated dashboard metrics (Session / Agent: observability:read) |
+| Audit | GET | `/api/v1/audit-logs` | List audit logs (Session / Agent: audit:read) |
+| API Keys | POST | `/api/v1/api-keys` | Create API key (Session: OWNER/ADMIN only, API keys not permitted) |
+| API Keys | GET | `/api/v1/api-keys` | List API keys (Session: OWNER/ADMIN only, API keys not permitted) |
+| API Keys | DELETE | `/api/v1/api-keys/:id` | Revoke API key (Session: OWNER/ADMIN only, API keys not permitted) |
 
 ---
 

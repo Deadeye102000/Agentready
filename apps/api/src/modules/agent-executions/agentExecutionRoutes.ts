@@ -113,6 +113,12 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   });
 
   app.post("/executions/:id/tool-calls/check", {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: "1 minute"
+      }
+    },
     preHandler: [requireScope("tool_calls:check")]
   }, async (request) => {
     const context = requireOrgContext(request);

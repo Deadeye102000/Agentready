@@ -14,7 +14,7 @@
  * Run: node --import tsx --test test/*.test.ts
  */
 
-import { describe, it, before, after, afterEach } from "node:test";
+import { describe, it, before, after, afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 // ── Import the module under test (ESM compatible via tsx) ─────────────────────
@@ -32,6 +32,7 @@ import {
   DEV_DEFAULT_SANDBOX_AGENT_API_KEY,
 } from "../src/lib/sandboxAuth.js";
 import { POST as sandboxPost } from "../src/app/api/sandbox/route.js";
+import { resetSandboxRateLimits } from "../src/lib/sandbox/rateLimit.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -347,6 +348,10 @@ describe("Sandbox Route Production Secret Protection", () => {
 });
 
 describe("Sandbox Route Schema Validation", () => {
+  beforeEach(() => {
+    resetSandboxRateLimits();
+  });
+
   it("returns 400 on malformed JSON body", async () => {
     const req = new Request("http://localhost:3000/api/sandbox", {
       method: "POST",
@@ -416,6 +421,39 @@ describe("Sandbox Route Schema Validation", () => {
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.match(json.error, /Invalid action/);
+  });
+
+  it("enforces IP rate limiting and returns 429 Too Many Requests", async () => {
+    const ip = "192.168.10.42";
+    // Send 10 validly-formatted rejection requests (e.g. malformed json) to exhaust limit
+    for (let i = 0; i < 10; i++) {
+      const req = new Request("http://localhost:3000/api/sandbox", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-forwarded-for": ip
+        },
+        body: JSON.stringify({ action: "unsupported" })
+      });
+      const res = await sandboxPost(req);
+      assert.equal(res.status, 400);
+    }
+
+    // 11th request should be rate-limited with HTTP 429
+    const rateLimitedReq = new Request("http://localhost:3000/api/sandbox", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-forwarded-for": ip
+      },
+      body: JSON.stringify({ action: "unsupported" })
+    });
+    const rateLimitedRes = await sandboxPost(rateLimitedReq);
+    assert.equal(rateLimitedRes.status, 429);
+    const rateLimitedJson = await rateLimitedRes.json();
+    assert.match(rateLimitedJson.error, /Too many requests/);
+    assert.ok(rateLimitedRes.headers.get("Retry-After"));
+    assert.equal(rateLimitedRes.headers.get("X-RateLimit-Remaining"), "0");
   });
 });
 

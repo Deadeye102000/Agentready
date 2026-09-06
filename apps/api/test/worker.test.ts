@@ -25,7 +25,9 @@ describe("Execution Runner Background Worker Integration Tests", () => {
     }
   });
 
-  it("poller claims QUEUED executions, transitions to RUNNING, and logs SYSTEM audit", async () => {
+  it("poller claims QUEUED executions and immediately fails with CONFIG_ERROR when AGENT_RUNNER_WEBHOOK_URL is missing", async () => {
+    delete process.env.AGENT_RUNNER_WEBHOOK_URL;
+
     // Seed a QUEUED execution
     const exec = {
       id: "exec-queued-1",
@@ -44,17 +46,65 @@ describe("Execution Runner Background Worker Integration Tests", () => {
     // Run one iteration of poll manually
     await runner.poll();
 
-    // Check execution was transitioned to RUNNING
+    // Check execution was claimed and immediately failed with CONFIG_ERROR (never left hanging in RUNNING)
     const updatedExec = mockStore.agentExecutions.find(e => e.id === "exec-queued-1");
     assert.ok(updatedExec);
-    assert.equal(updatedExec.status, "RUNNING");
+    assert.equal(updatedExec.status, "FAILED");
+    assert.equal(updatedExec.failureReason, "CONFIG_ERROR: AGENT_RUNNER_WEBHOOK_URL is not configured");
     assert.equal(updatedExec.attemptCount, 1);
 
-    // Verify audit log has SYSTEM actor type and correct action
-    const log = mockStore.auditLogs.find(l => l.targetId === "exec-queued-1");
-    assert.ok(log);
-    assert.equal(log.actorType, "SYSTEM");
-    assert.equal(log.action, "agent_execution.started");
+    // Verify audit logs contain both the start event and the failure event
+    const startLog = mockStore.auditLogs.find(l => l.targetId === "exec-queued-1" && l.action === "agent_execution.started");
+    assert.ok(startLog);
+    assert.equal(startLog.actorType, "SYSTEM");
+
+    const failLog = mockStore.auditLogs.find(l => l.targetId === "exec-queued-1" && l.action === "agent_execution.runner_failed");
+    assert.ok(failLog);
+    assert.equal(failLog.actorType, "SYSTEM");
+    assert.equal(failLog.metadata?.after?.failureReason, "CONFIG_ERROR: AGENT_RUNNER_WEBHOOK_URL is not configured");
+  });
+
+  it("poller dispatches to webhook when AGENT_RUNNER_WEBHOOK_URL is configured", async () => {
+    const originalFetch = globalThis.fetch;
+    process.env.AGENT_RUNNER_WEBHOOK_URL = "http://mock-runner.internal/webhook";
+
+    let webhookPayload: any = null;
+    globalThis.fetch = (async (url: any, init: any) => {
+      webhookPayload = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "SUCCEEDED", output: { result: "completed successfully" } }),
+      } as any;
+    }) as any;
+
+    try {
+      const exec = {
+        id: "exec-webhook-success",
+        organizationId: "org-alpha",
+        projectId: "proj-1",
+        agentId: "agent-1",
+        status: "QUEUED",
+        objective: "Webhook dispatch test",
+        input: { prompt: "run task" },
+        attemptCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockStore.agentExecutions.push(exec);
+
+      await runner.poll();
+
+      const updatedExec = mockStore.agentExecutions.find(e => e.id === "exec-webhook-success");
+      assert.ok(updatedExec);
+      assert.equal(updatedExec.status, "SUCCEEDED");
+      assert.deepEqual(updatedExec.output, { result: "completed successfully" });
+      assert.equal(webhookPayload.executionId, "exec-webhook-success");
+      assert.equal(webhookPayload.objective, "Webhook dispatch test");
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.AGENT_RUNNER_WEBHOOK_URL;
+    }
   });
 
   it("poller does not claim non-QUEUED executions", async () => {

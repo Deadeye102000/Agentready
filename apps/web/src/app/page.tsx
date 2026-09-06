@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Navbar } from "../components/Navbar";
 import { SandboxController } from "../components/SandboxController";
 import {
@@ -34,9 +35,12 @@ function ErrorAlert({ message, isFallback }: { message: string; isFallback: bool
 }
 
 export default async function HomePage() {
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore.toString();
+
   const [dashboardRes, regressionRes] = await Promise.all([
-    fetchDashboardData(),
-    fetchRegressionData()
+    fetchDashboardData(cookieHeader),
+    fetchRegressionData(cookieHeader)
   ]);
 
   const dashboard = dashboardRes.data;

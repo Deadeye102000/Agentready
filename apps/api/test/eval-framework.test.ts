@@ -80,6 +80,13 @@ describe("Evaluation Framework Integration Tests", () => {
     assert.equal(body.expectedStatus, "SUCCEEDED");
     assert.deepEqual(body.expectedTools, ["file_write"]);
     assert.equal(mockStore.evalCases.length, 1);
+
+    // Verify eval_case.created audit record
+    const auditRecord = mockStore.auditLogs.find(
+      (l) => l.action === "eval_case.created" && l.targetId === body.id
+    );
+    assert.ok(auditRecord, "Expected eval_case.created audit log record");
+    assert.equal(auditRecord.targetType, "EvalCase");
   });
 
   it("2. GET /eval-cases - lists evaluation cases scoped to organization", async () => {
@@ -147,6 +154,13 @@ describe("Evaluation Framework Integration Tests", () => {
     const traces = mockStore.toolCallTraces.filter((t) => t.executionId === run.executionId);
     assert.equal(traces.length, 1);
     assert.equal(traces[0].toolName, "file_write");
+
+    // Verify eval_case.run audit record
+    const caseRunAudit = mockStore.auditLogs.find(
+      (l) => l.action === "eval_case.run" && l.targetId === "case-1"
+    );
+    assert.ok(caseRunAudit, "Expected eval_case.run audit log record");
+    assert.equal(caseRunAudit.targetType, "EvalCase");
   });
 
   it("4. POST /eval-cases/:id/run (simulateFailure) - executes case and fails (FAILED)", async () => {

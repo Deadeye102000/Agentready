@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
 export async function toggleFeatureFlag(capability: string, agentId: string | null) {
-  const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:4000";
+  const apiBaseUrl = process.env.AGENTREADY_API_URL ?? "http://localhost:3001";
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 

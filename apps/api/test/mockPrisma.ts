@@ -19,6 +19,7 @@ export interface MockStore {
   evalCases: any[];
   apiKeys: any[];
   idempotencyKeys: any[];
+  mcpServerRegistrations: any[];
 }
 
 export const mockStore: MockStore = {
@@ -39,6 +40,7 @@ export const mockStore: MockStore = {
   evalCases: [],
   apiKeys: [],
   idempotencyKeys: [],
+  mcpServerRegistrations: [],
 };
 
 export function resetMockStore() {
@@ -59,6 +61,7 @@ export function resetMockStore() {
   mockStore.evalCases = [];
   mockStore.apiKeys = [];
   mockStore.idempotencyKeys = [];
+  mockStore.mcpServerRegistrations = [];
 }
 
 // Helper to generate IDs
@@ -244,7 +247,10 @@ mockPrisma.taskContract.findFirst = async (args: any) => {
 mockPrisma.agentExecution.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentExecutions.filter(
-    (e) => (!where.id || e.id === where.id) && (!where.organizationId || e.organizationId === where.organizationId)
+    (e) =>
+      (!where.id || e.id === where.id) &&
+      (!where.organizationId || e.organizationId === where.organizationId) &&
+      (!where.status || e.status === where.status)
   ).length;
 };
 
@@ -320,6 +326,23 @@ mockPrisma.agentExecution.updateMany = async (args: any) => {
     match.updatedAt = new Date();
   }
   return { count: matches.length };
+};
+
+mockPrisma.agentExecution.update = async (args: any) => {
+  const { where, data } = args;
+  const match = mockStore.agentExecutions.find((e) => e.id === where.id);
+  if (!match) {
+    throw new Error(`AgentExecution not found: ${where.id}`);
+  }
+  if (data.status !== undefined) match.status = data.status;
+  if (data.output !== undefined) match.output = data.output;
+  if (data.startedAt !== undefined) match.startedAt = data.startedAt;
+  if (data.completedAt !== undefined) match.completedAt = data.completedAt;
+  if (data.attemptCount !== undefined) match.attemptCount = data.attemptCount;
+  if (data.timedOutAt !== undefined) match.timedOutAt = data.timedOutAt;
+  if (data.failureReason !== undefined) match.failureReason = data.failureReason;
+  match.updatedAt = new Date();
+  return match;
 };
 
 mockPrisma.agentExecution.findMany = async (args: any) => {
@@ -403,21 +426,23 @@ mockPrisma.toolCallTrace.findMany = async (args: any) => {
   if (args.orderBy) {
     const orderItem = Array.isArray(args.orderBy) ? args.orderBy[0] : args.orderBy;
     if (orderItem?.startedAt === "desc") {
-      matches = matches.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      matches = matches.sort((a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0));
     } else if (orderItem?.startedAt === "asc") {
-      matches = matches.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+      matches = matches.sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0));
     }
   }
   const skip = args.skip || 0;
   const take = args.take !== undefined ? args.take : matches.length;
   matches = matches.slice(skip, skip + take);
 
-  if (args.include?.agent) {
+  if (args.include?.agent || args.include?.execution) {
     return matches.map((t) => {
       const agent = mockStore.agentIdentities.find((a) => a.id === t.agentId);
+      const execution = mockStore.agentExecutions.find((e) => e.id === t.executionId);
       return {
         ...t,
-        agent: agent ? { id: agent.id, name: agent.name } : null
+        agent: agent ? { id: agent.id, name: agent.name } : null,
+        execution: execution ? { id: execution.id, status: execution.status, objective: execution.objective } : null
       };
     });
   }
@@ -473,6 +498,13 @@ mockPrisma.auditLog.create = async (args: any) => {
   };
   mockStore.auditLogs.push(log);
   return log;
+};
+
+mockPrisma.auditLog.findMany = async (args: any) => {
+  const where = args?.where || {};
+  return mockStore.auditLogs
+    .filter((log) => !where.organizationId || log.organizationId === where.organizationId)
+    .slice(0, args?.take || 50);
 };
 
 // Feature Flags
@@ -615,6 +647,15 @@ mockPrisma.approvalRequest.create = async (args: any) => {
   };
   mockStore.approvalRequests.push(request);
   return request;
+};
+
+mockPrisma.approvalRequest.count = async (args: any) => {
+  const where = args?.where || {};
+  return mockStore.approvalRequests.filter((r) => {
+    if (where.organizationId && r.organizationId !== where.organizationId) return false;
+    if (where.status && r.status !== where.status) return false;
+    return true;
+  }).length;
 };
 
 mockPrisma.approvalRequest.findMany = async (args: any) => {
@@ -780,6 +821,15 @@ mockPrisma.evalRun.create = async (args: any) => {
   return item;
 };
 
+mockPrisma.evalRun.count = async (args: any) => {
+  const where = args?.where || {};
+  return mockStore.evalRuns.filter((er) => {
+    if (where.organizationId && er.organizationId !== where.organizationId) return false;
+    if (where.status && er.status !== where.status) return false;
+    return true;
+  }).length;
+};
+
 mockPrisma.evalRun.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.evalRuns.filter(
@@ -801,6 +851,17 @@ mockPrisma.evalRun.findMany = async (args: any) => {
       execution: execution ? { id: execution.id, status: execution.status, objective: execution.objective } : null,
     };
   });
+};
+
+mockPrisma.organization = {
+  findUnique: async (args: any) => {
+    const where = args.where || {};
+    return mockStore.organizations.find((o) => o.id === where.id) || null;
+  },
+  findFirst: async (args: any) => {
+    const where = args.where || {};
+    return mockStore.organizations.find((o) => !where.id || o.id === where.id) || null;
+  }
 };
 
 mockPrisma.organizationMember = {
@@ -873,5 +934,14 @@ mockPrisma.apiKey = {
     if (data.lastUsedAt !== undefined) item.lastUsedAt = data.lastUsedAt;
     item.updatedAt = new Date();
     return item;
+  }
+};
+
+mockPrisma.mcpServerRegistration = {
+  findMany: async (args: any) => {
+    const where = args?.where || {};
+    return (mockStore.mcpServerRegistrations || []).filter(
+      (m) => !where.organizationId || m.organizationId === where.organizationId
+    );
   }
 };

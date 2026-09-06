@@ -56,7 +56,7 @@ describe("Role-Based Access Control (RBAC) Integration Tests", () => {
       name: "Agent API Key",
       keyPrefix: "ar_live_",
       keyHash,
-      scopes: ["agent_execution:write", "trace:write"],
+      scopes: ["executions:write", "traces:write"],
       revokedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),

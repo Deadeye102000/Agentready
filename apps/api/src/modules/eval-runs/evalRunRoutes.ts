@@ -77,7 +77,11 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createEvalCaseBodySchema, request.body);
-    const evalCase = await service.createCase({ ...body, organizationId: context.organizationId });
+    const evalCase = await service.createCase({
+      ...body,
+      organizationId: context.organizationId,
+      actorUserId: context.userId
+    });
     return reply.code(201).send(evalCase);
   });
 
@@ -96,7 +100,8 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
     const params = runEvalCaseParamsSchema.parse(request.params);
     const evalRun = await service.runCase({
       organizationId: context.organizationId,
-      caseId: params.id
+      caseId: params.id,
+      actorUserId: context.userId
     });
     return reply.code(200).send(evalRun);
   });

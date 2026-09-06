@@ -3,16 +3,30 @@ import { HttpError } from "../../lib/httpError.js";
 import { AuditService } from "../audit/auditService.js";
 import { AuthRepository } from "./authRepository.js";
 
+import type { SystemRole } from "./rbac.js";
+import type { ApiKeyScope } from "./scopes.js";
+
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 
-export type AuthContext = {
+export type UserAuthContext = {
+  actorType: "USER";
   organizationId: string;
-  actorType: "USER" | "AGENT";
-  userId?: string;
-  agentId?: string;
-  role?: string;
-  scopes?: string[];
+  userId: string;
+  role: SystemRole;
+  agentId?: never;
+  scopes?: never;
 };
+
+export type AgentAuthContext = {
+  actorType: "AGENT";
+  organizationId: string;
+  agentId: string;
+  scopes: ApiKeyScope[];
+  userId?: never;
+  role?: never;
+};
+
+export type AuthContext = UserAuthContext | AgentAuthContext;
 
 export class AuthService {
   constructor(
@@ -59,7 +73,7 @@ export class AuthService {
       if (this.auth.isUniqueConstraintError(error)) {
         throw new HttpError({
           code: "CONFLICT",
-          message: "A user or organization with these details already exists",
+          message: "Email or organization slug already exists",
           statusCode: 409
         });
       }
@@ -70,7 +84,7 @@ export class AuthService {
 
   async login(input: { email: string; password: string }) {
     const user = await this.auth.findUserByEmail(input.email);
-    if (!user?.passwordHash || !(await verifyPassword(input.password, user.passwordHash))) {
+    if (!user || !user.passwordHash) {
       throw new HttpError({
         code: "UNAUTHORIZED",
         message: "Invalid email or password",
@@ -78,25 +92,45 @@ export class AuthService {
       });
     }
 
-    const session = this.createSessionResponse(user);
+    const isValid = await verifyPassword(input.password, user.passwordHash);
+    if (!isValid) {
+      throw new HttpError({
+        code: "UNAUTHORIZED",
+        message: "Invalid email or password",
+        statusCode: 401
+      });
+    }
+
+    const membership = user.memberships[0];
+    if (!membership) {
+      throw new HttpError({
+        code: "UNAUTHORIZED",
+        message: "No organization membership found for this user",
+        statusCode: 401
+      });
+    }
+
+    const session = this.createSessionResponse({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      memberships: [membership]
+    });
+
     await this.audit.record({
-      organizationId: session.body.organization.id,
+      organizationId: membership.organizationId,
       source: "HUMAN",
-      actorUserId: session.body.user.id,
+      actorUserId: user.id,
       action: "auth.logged_in",
       resourceType: "User",
-      resourceId: session.body.user.id,
-      after: {
-        organizationId: session.body.organization.id,
-        role: session.body.role
-      }
+      resourceId: user.id
     });
 
     return session;
   }
 
   async currentUser(context: AuthContext) {
-    if (!context.userId) {
+    if (context.actorType !== "USER" || !context.userId) {
       throw new HttpError({
         code: "UNAUTHORIZED",
         message: "Session is no longer valid",
@@ -133,7 +167,7 @@ export class AuthService {
   }
 
   async logout(context: AuthContext | null) {
-    if (context) {
+    if (context && context.actorType === "USER") {
       await this.audit.record({
         organizationId: context.organizationId,
         source: "HUMAN",

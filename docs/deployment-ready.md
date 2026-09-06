@@ -19,6 +19,7 @@ You must set up the following environment variables on your deployment host (or 
 | `API_HOST` | No | `"0.0.0.0"` | Host boundary interface to bind the API server. |
 | `API_PORT` | No | `3001` | Network port for incoming REST and WebSocket API requests. |
 | `SENTRY_DSN` | No | `"https://<key>@sentry.io/<project>"` | DSN URL for forwarding unexpected 500 error logs to Sentry for monitoring. |
+| `AGENT_RUNNER_WEBHOOK_URL` | Yes (for async background execution) | `"https://runner.internal/webhook"` | Target HTTP POST webhook endpoint invoked by the background execution runner when claiming an agent execution. If not configured, claimed executions fail immediately and loudly across all environments with `CONFIG_ERROR: AGENT_RUNNER_WEBHOOK_URL is not configured`. |
 
 ### B. Next.js Dashboard (`apps/web`)
 

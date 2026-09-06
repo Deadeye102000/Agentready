@@ -40,7 +40,7 @@ export async function registerV1Routes(app: FastifyInstance) {
       if (authHeader && authHeader.startsWith("Bearer ")) {
         request.authContext = await getMachineAuthContextFromRequest(request);
       } else {
-        request.authContext = getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
+        request.authContext = await getAuthContextFromRequest(request, env.AUTH_SESSION_SECRET);
       }
       enforceTenantScope(request);
     });

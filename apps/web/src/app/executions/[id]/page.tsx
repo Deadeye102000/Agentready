@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Navbar } from "../../../components/Navbar";
 import {
   fetchExecutionDetail,
@@ -43,9 +44,12 @@ function safeJsonSummary(val: any) {
 
 export default async function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore.toString();
+
   const [executionRes, tracesRes] = await Promise.all([
-    fetchExecutionDetail(resolvedParams.id),
-    fetchToolCallTraces(resolvedParams.id)
+    fetchExecutionDetail(resolvedParams.id, cookieHeader),
+    fetchToolCallTraces(resolvedParams.id, 1, 50, cookieHeader)
   ]);
 
   const execution = executionRes.data;

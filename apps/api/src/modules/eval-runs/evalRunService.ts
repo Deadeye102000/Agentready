@@ -103,6 +103,7 @@ export class EvalRunService {
     expectedStatus?: string | null;
     expectedTools?: string[];
     successCriteria?: string | null;
+    actorUserId?: string;
   }) {
     const isEvalEnabled = await this.governance.findFeatureFlag({
       organizationId: input.organizationId,
@@ -131,6 +132,25 @@ export class EvalRunService {
       successCriteria: input.successCriteria || null
     });
 
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: input.actorUserId ? "HUMAN" : "SYSTEM",
+      actorUserId: input.actorUserId,
+      action: "eval_case.created",
+      resourceType: "EvalCase",
+      resourceId: evalCase.id,
+      after: {
+        name: evalCase.name,
+        taskContractId: evalCase.taskContractId,
+        expectedStatus: evalCase.expectedStatus,
+        expectedTools: evalCase.expectedTools
+      },
+      metadata: {
+        taskContractId: input.taskContractId,
+        name: input.name
+      }
+    });
+
     return evalCase;
   }
 
@@ -138,7 +158,7 @@ export class EvalRunService {
     return this.evalRuns.listCases(input);
   }
 
-  async runCase(input: { organizationId: string; caseId: string }) {
+  async runCase(input: { organizationId: string; caseId: string; actorUserId?: string }) {
     const isEvalEnabled = await this.governance.findFeatureFlag({
       organizationId: input.organizationId,
       capability: "eval_runner"
@@ -306,6 +326,27 @@ export class EvalRunService {
         evalCaseId: evalCase.id,
         passed,
         score
+      }
+    });
+
+    await this.audit.record({
+      organizationId: input.organizationId,
+      source: input.actorUserId ? "HUMAN" : "SYSTEM",
+      actorUserId: input.actorUserId,
+      action: "eval_case.run",
+      resourceType: "EvalCase",
+      resourceId: evalCase.id,
+      after: {
+        evalRunId: evalRun.id,
+        status: evalRun.status,
+        score: evalRun.score,
+        passed
+      },
+      metadata: {
+        evalRunId: evalRun.id,
+        passed,
+        score,
+        duration
       }
     });
 

@@ -3,6 +3,21 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { HttpError } from "../../lib/httpError.js";
 import type { AuthContext } from "./authService.js";
 
+import type { SystemRole } from "./rbac.js";
+
+const VALID_SYSTEM_ROLES = new Set<SystemRole>(["OWNER", "ADMIN", "MEMBER", "VIEWER", "APPROVER"]);
+
+export function parseSystemRole(role: unknown): SystemRole {
+  if (typeof role === "string" && VALID_SYSTEM_ROLES.has(role as SystemRole)) {
+    return role as SystemRole;
+  }
+  throw new HttpError({
+    code: "INTERNAL_ERROR",
+    message: `Invalid membership role stored in database: "${String(role)}". Expected one of: ${Array.from(VALID_SYSTEM_ROLES).join(", ")}`,
+    statusCode: 500
+  });
+}
+
 export function parseCookies(cookieHeader: string | undefined) {
   const cookies = new Map<string, string>();
   if (!cookieHeader) {
@@ -21,7 +36,10 @@ export function parseCookies(cookieHeader: string | undefined) {
   return cookies;
 }
 
-export function getAuthContextFromRequest(request: FastifyRequest, sessionSecret: string): AuthContext | null {
+export async function getAuthContextFromRequest(
+  request: FastifyRequest,
+  sessionSecret: string
+): Promise<AuthContext | null> {
   const token = parseCookies(request.headers.cookie).get("agentready_session");
   if (!token) {
     return null;
@@ -32,10 +50,29 @@ export function getAuthContextFromRequest(request: FastifyRequest, sessionSecret
     return null;
   }
 
+  const prisma = request.server.prisma;
+  if (!prisma) {
+    return null;
+  }
+
+  const member = await prisma.organizationMember.findFirst({
+    where: {
+      userId: session.userId,
+      organizationId: session.organizationId
+    }
+  });
+
+  if (!member) {
+    return null;
+  }
+
+  const role = parseSystemRole(member.role);
+
   return {
     organizationId: session.organizationId,
     actorType: "USER",
-    userId: session.userId
+    userId: session.userId,
+    role
   };
 }
 

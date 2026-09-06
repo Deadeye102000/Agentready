@@ -51,6 +51,34 @@ describe("API Key Scope Enforcement Tests", () => {
       updatedAt: new Date(),
     };
     mockStore.taskContracts.push(contract);
+
+    const execution = {
+      id: "exec-1",
+      organizationId: "org-1",
+      projectId: "proj-1",
+      agentId: "agent-1",
+      taskContractId: "contract-1",
+      status: "RUNNING",
+      objective: "Execution 1",
+      input: {},
+      riskScore: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    mockStore.agentExecutions.push(execution);
+
+    // Seed additional role users: VIEWER, MEMBER, OWNER
+    mockStore.users.push(
+      { id: "user-viewer", email: "viewer@example.com", name: "Viewer User", passwordHash: "hash", createdAt: new Date(), updatedAt: new Date() },
+      { id: "user-member", email: "member@example.com", name: "Member User", passwordHash: "hash", createdAt: new Date(), updatedAt: new Date() },
+      { id: "user-owner", email: "owner@example.com", name: "Owner User", passwordHash: "hash", createdAt: new Date(), updatedAt: new Date() }
+    );
+
+    mockStore.memberships.push(
+      { id: "mem-viewer", userId: "user-viewer", organizationId: "org-1", role: "VIEWER", createdAt: new Date(), updatedAt: new Date() },
+      { id: "mem-member", userId: "user-member", organizationId: "org-1", role: "MEMBER", createdAt: new Date(), updatedAt: new Date() },
+      { id: "mem-owner", userId: "user-owner", organizationId: "org-1", role: "OWNER", createdAt: new Date(), updatedAt: new Date() }
+    );
   });
 
   afterEach(async () => {
@@ -240,10 +268,10 @@ describe("API Key Scope Enforcement Tests", () => {
       assert.equal(writeRes.statusCode, 201);
     });
 
-    it("confirms session-authenticated human users are unaffected by API key scope restrictions", async () => {
+    it("confirms session-authenticated ADMIN user has full access to reads and writes", async () => {
       const cookie = getSessionCookie("user-1", "org-1");
 
-      // User session can call read
+      // Admin user session can call read
       const readRes = await app.inject({
         method: "GET",
         url: "/api/v1/executions",
@@ -251,7 +279,7 @@ describe("API Key Scope Enforcement Tests", () => {
       });
       assert.equal(readRes.statusCode, 200);
 
-      // User session can call write
+      // Admin user session can call write
       const writeRes = await app.inject({
         method: "POST",
         url: "/api/v1/executions",
@@ -259,10 +287,270 @@ describe("API Key Scope Enforcement Tests", () => {
         payload: {
           projectId: "proj-1",
           agentId: "agent-1",
-          objective: "Human user session write"
+          objective: "Admin user session write"
         }
       });
       assert.equal(writeRes.statusCode, 201);
+    });
+  });
+
+  describe("Session User Role-Based Scope Enforcement", () => {
+    it("confirms a VIEWER-role session user gets 403 on POST /executions, POST /eval-suites/run, and POST /tool-call-traces", async () => {
+      const viewerCookie = getSessionCookie("user-viewer", "org-1");
+
+      // 1. POST /executions -> 403
+      const execRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/executions",
+        headers: { cookie: viewerCookie },
+        payload: {
+          projectId: "proj-1",
+          agentId: "agent-1",
+          objective: "Unauthorized VIEWER execution write"
+        }
+      });
+      assert.equal(execRes.statusCode, 403);
+      const execBody = JSON.parse(execRes.body);
+      assert.equal(execBody.error.code, "FORBIDDEN");
+      assert.match(execBody.error.message, /Insufficient role permissions.*executions:write/i);
+
+      // 2. POST /eval-suites/run -> 403
+      const evalSuiteRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/eval-suites/run",
+        headers: { cookie: viewerCookie },
+        payload: {
+          projectId: "proj-1",
+          taskContractId: "contract-1"
+        }
+      });
+      assert.equal(evalSuiteRes.statusCode, 403);
+      const evalSuiteBody = JSON.parse(evalSuiteRes.body);
+      assert.equal(evalSuiteBody.error.code, "FORBIDDEN");
+      assert.match(evalSuiteBody.error.message, /Insufficient role permissions.*eval:write/i);
+
+      // 3. POST /tool-call-traces -> 403
+      const traceRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/tool-call-traces",
+        headers: { cookie: viewerCookie },
+        payload: {
+          executionId: "exec-1",
+          agentId: "agent-1",
+          toolName: "database_query",
+          input: { query: "SELECT 1" }
+        }
+      });
+      assert.equal(traceRes.statusCode, 403);
+      const traceBody = JSON.parse(traceRes.body);
+      assert.equal(traceBody.error.code, "FORBIDDEN");
+      assert.match(traceBody.error.message, /Insufficient role permissions/i);
+    });
+
+    it("confirms a VIEWER-role session user gets 200 on read routes (GET /executions, GET /tool-call-traces, GET /eval-runs)", async () => {
+      const viewerCookie = getSessionCookie("user-viewer", "org-1");
+
+      const execRead = await app.inject({
+        method: "GET",
+        url: "/api/v1/executions",
+        headers: { cookie: viewerCookie }
+      });
+      assert.equal(execRead.statusCode, 200);
+
+      const traceRead = await app.inject({
+        method: "GET",
+        url: "/api/v1/tool-call-traces",
+        headers: { cookie: viewerCookie }
+      });
+      assert.equal(traceRead.statusCode, 200);
+
+      const evalRead = await app.inject({
+        method: "GET",
+        url: "/api/v1/eval-runs",
+        headers: { cookie: viewerCookie }
+      });
+      assert.equal(evalRead.statusCode, 200);
+    });
+
+    it("confirms a MEMBER-role session user can execute writes (POST /executions, POST /tool-call-traces)", async () => {
+      const memberCookie = getSessionCookie("user-member", "org-1");
+
+      // Write execution
+      const execRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/executions",
+        headers: { cookie: memberCookie },
+        payload: {
+          projectId: "proj-1",
+          agentId: "agent-1",
+          objective: "Authorized MEMBER execution write"
+        }
+      });
+      assert.equal(execRes.statusCode, 201);
+      const execBody = JSON.parse(execRes.body);
+
+      // Write tool call trace
+      const traceRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/tool-call-traces",
+        headers: { cookie: memberCookie },
+        payload: {
+          executionId: execBody.id,
+          agentId: "agent-1",
+          toolName: "database_query",
+          input: { query: "SELECT 1" }
+        }
+      });
+      assert.equal(traceRes.statusCode, 201);
+    });
+
+    it("confirms OWNER and ADMIN retain full access to writes and reads under wildcard scope resolution", async () => {
+      const ownerCookie = getSessionCookie("user-owner", "org-1");
+      const adminCookie = getSessionCookie("user-1", "org-1");
+
+      for (const [roleName, cookie] of [["OWNER", ownerCookie], ["ADMIN", adminCookie]]) {
+        // Read executions
+        const execRead = await app.inject({
+          method: "GET",
+          url: "/api/v1/executions",
+          headers: { cookie }
+        });
+        assert.equal(execRead.statusCode, 200, `${roleName} should be able to read executions`);
+
+        // Write execution
+        const execWrite = await app.inject({
+          method: "POST",
+          url: "/api/v1/executions",
+          headers: { cookie },
+          payload: {
+            projectId: "proj-1",
+            agentId: "agent-1",
+            objective: `${roleName} wildcard write`
+          }
+        });
+        assert.equal(execWrite.statusCode, 201, `${roleName} should be able to write executions`);
+        const createdExec = JSON.parse(execWrite.body);
+
+        // Read traces
+        const traceRead = await app.inject({
+          method: "GET",
+          url: "/api/v1/tool-call-traces",
+          headers: { cookie }
+        });
+        assert.equal(traceRead.statusCode, 200, `${roleName} should be able to read traces`);
+
+        // Write trace
+        const traceWrite = await app.inject({
+          method: "POST",
+          url: "/api/v1/tool-call-traces",
+          headers: { cookie },
+          payload: {
+            executionId: createdExec.id,
+            agentId: "agent-1",
+            toolName: "database_query",
+            input: { query: "SELECT 1" }
+          }
+        });
+        assert.equal(traceWrite.statusCode, 201, `${roleName} should be able to write traces`);
+
+        // Read eval runs
+        const evalRead = await app.inject({
+          method: "GET",
+          url: "/api/v1/eval-runs",
+          headers: { cookie }
+        });
+        assert.equal(evalRead.statusCode, 200, `${roleName} should be able to read eval runs`);
+
+        // Write eval run
+        const evalWrite = await app.inject({
+          method: "POST",
+          url: "/api/v1/eval-runs",
+          headers: { cookie },
+          payload: {
+            projectId: "proj-1",
+            name: `${roleName} Eval Run`,
+            contractId: "contract-1"
+          }
+        });
+        assert.equal(evalWrite.statusCode, 201, `${roleName} should be able to write eval runs`);
+      }
+    });
+
+    it("confirms role demotion from ADMIN to VIEWER takes effect immediately on next request with same session cookie", async () => {
+      const cookie = getSessionCookie("user-1", "org-1");
+
+      // Initially ADMIN: write succeeds
+      const initialWrite = await app.inject({
+        method: "POST",
+        url: "/api/v1/executions",
+        headers: { cookie },
+        payload: {
+          projectId: "proj-1",
+          agentId: "agent-1",
+          objective: "Admin write before demotion"
+        }
+      });
+      assert.equal(initialWrite.statusCode, 201);
+
+      // Demote user-1 from ADMIN to VIEWER in database
+      const membership = mockStore.memberships.find(
+        (m) => m.userId === "user-1" && m.organizationId === "org-1"
+      );
+      assert.ok(membership);
+      membership.role = "VIEWER";
+
+      // With the exact same session cookie, next write request immediately gets 403
+      const demotedWrite = await app.inject({
+        method: "POST",
+        url: "/api/v1/executions",
+        headers: { cookie },
+        payload: {
+          projectId: "proj-1",
+          agentId: "agent-1",
+          objective: "Demoted write attempt"
+        }
+      });
+      assert.equal(demotedWrite.statusCode, 403);
+      const demotedBody = JSON.parse(demotedWrite.body);
+      assert.equal(demotedBody.error.code, "FORBIDDEN");
+      assert.match(demotedBody.error.message, /Insufficient role permissions.*executions:write/i);
+
+      // Read route still works for VIEWER with same cookie
+      const demotedRead = await app.inject({
+        method: "GET",
+        url: "/api/v1/executions",
+        headers: { cookie }
+      });
+      assert.equal(demotedRead.statusCode, 200);
+    });
+
+    it("confirms membership removal immediately invalidates session auth on next request", async () => {
+      const cookie = getSessionCookie("user-viewer", "org-1");
+
+      // Verify active session works for read
+      const initialRead = await app.inject({
+        method: "GET",
+        url: "/api/v1/executions",
+        headers: { cookie }
+      });
+      assert.equal(initialRead.statusCode, 200);
+
+      // Remove membership from organization in database
+      const memIndex = mockStore.memberships.findIndex(
+        (m) => m.userId === "user-viewer" && m.organizationId === "org-1"
+      );
+      assert.ok(memIndex !== -1);
+      mockStore.memberships.splice(memIndex, 1);
+
+      // Next request with same cookie immediately gets 401 Unauthorized
+      const revokedReq = await app.inject({
+        method: "GET",
+        url: "/api/v1/executions",
+        headers: { cookie }
+      });
+      assert.equal(revokedReq.statusCode, 401);
+      const revokedBody = JSON.parse(revokedReq.body);
+      assert.equal(revokedBody.error.code, "UNAUTHORIZED");
     });
   });
 });

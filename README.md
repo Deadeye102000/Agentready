@@ -117,44 +117,48 @@ Agentready/
 
 ## 📡 API Endpoints Reference
 
+> [!IMPORTANT]
+> **Human Governance Invariant (No Machine Self-Governance)**:
+> Administrative and policy-defining routes (`POST /task-contracts`, `PUT /feature-flags`, `PUT /approval-gates`, `POST /api-keys`, etc.) require human interactive session authentication (`OWNER` or `ADMIN` role). Machine API keys—even those possessing wildcard (`*`, `all`, `admin`) scopes—are **strictly rejected with 403 Forbidden** on administrative routes to guarantee that autonomous agents cannot tamper with or bypass the governance boundaries, feature flags, and approval gates that constrain them. Conversely, machine execution callbacks (`POST /tool-calls/:traceId/result`) require machine Bearer authentication and reject human sessions.
+
 | Category | Method | Endpoint Path | Description | Access |
-|:---|:---:|:---|:---|:---:|
+|:---|:---:|:---|:---|:---|
 | **Auth** | `POST` | `/api/v1/auth/register` | Register user + new organization | Public |
 | **Auth** | `POST` | `/api/v1/auth/login` | Authenticate & issue HMAC session cookie | Public |
 | **Auth** | `POST` | `/api/v1/auth/logout` | Revoke active user session | Session |
 | **Auth** | `GET` | `/api/v1/auth/me` | Fetch active session & user details | Session |
-| **Executions** | `POST` | `/api/v1/executions` | Trigger new agent execution | Session / Agent (`executions:write`) |
+| **Executions** | `POST` | `/api/v1/executions` | Trigger new agent execution | Session (Member+) / Agent (`executions:write`) |
 | **Executions** | `GET` | `/api/v1/executions` | List org executions (with pagination/filters) | Session / Agent (`executions:read`) |
 | **Executions** | `GET` | `/api/v1/executions/:id` | Get execution details & trace history | Session / Agent (`executions:read`) |
-| **Executions** | `PATCH` | `/api/v1/executions/:id` | Transition execution status | Session / Agent (`executions:write`) |
-| **Tool Governance**| `POST` | `/api/v1/executions/:id/tool-calls/check` | Pre-flight tool check against policy gates & single-flight lock | Session / Agent |
-| **Tool Governance**| `POST` | `/api/v1/tool-calls/:traceId/result` | Report synchronous tool execution result | Agent (`tool_calls:result`) |
-| **Tool Traces**| `GET` | `/api/v1/tool-call-traces` | List tool call traces for an execution (with pagination) | Session / Agent (`traces:read`) |
-| **Tool Traces**| `POST` | `/api/v1/tool-call-traces` | Record per-step tool trace event | Session / Agent (`traces:write`) |
-| **Tool Traces**| `PATCH` | `/api/v1/tool-call-traces/:id` | Update per-step tool trace | Session / Agent (`traces:write`) |
-| **Contracts**  | `POST` | `/api/v1/task-contracts` | Create new agent task contract | Owner / Admin |
+| **Executions** | `PATCH` | `/api/v1/executions/:id` | Transition execution status | Session (Member+) / Agent (`executions:write`) |
+| **Tool Governance**| `POST` | `/api/v1/executions/:id/tool-calls/check` | Pre-flight tool check against policy gates & single-flight lock | Session (Member+) / Agent (`tool_calls:check`) |
+| **Tool Governance**| `POST` | `/api/v1/tool-calls/:traceId/result` | Report synchronous tool execution result | Machine API Key only (`tool_calls:result`), Sessions not permitted |
+| **Tool Traces**| `GET` | `/api/v1/tool-call-traces` | List tool call traces for an execution (with pagination) | Session / Agent (`traces:read` or `executions:read`) |
+| **Tool Traces**| `POST` | `/api/v1/tool-call-traces` | Record per-step tool trace event | Session (Member+) / Agent (`traces:write`) |
+| **Tool Traces**| `PATCH` | `/api/v1/tool-call-traces/:id` | Update per-step tool trace | Session (Member+) / Agent (`traces:write`) |
+| **Contracts**  | `POST` | `/api/v1/task-contracts` | Create new agent task contract | Session (Owner/Admin) only, API keys not permitted |
 | **Contracts**  | `GET` | `/api/v1/task-contracts` | List task contracts | Session / Agent (`contracts:read`) |
 | **Contracts**  | `GET` | `/api/v1/task-contracts/:id` | Get task contract by ID | Session / Agent (`contracts:read`) |
 | **Governance** | `GET` | `/api/v1/approval-gates` | List policy approval gates | Session / Agent (`governance:read`) |
-| **Governance** | `PUT` | `/api/v1/approval-gates` | Upsert approval gate rule | Owner / Admin |
+| **Governance** | `PUT` | `/api/v1/approval-gates` | Upsert approval gate rule | Session (Owner/Admin) only, API keys not permitted |
 | **Governance** | `GET` | `/api/v1/feature-flags` | List active feature flags | Session / Agent (`governance:read`) |
-| **Governance** | `PUT` | `/api/v1/feature-flags` | Upsert feature flag rule | Owner / Admin |
-| **Governance** | `POST` | `/api/v1/feature-flags/toggle` | Toggle feature flag state | Owner / Admin |
+| **Governance** | `PUT` | `/api/v1/feature-flags` | Upsert feature flag rule | Session (Owner/Admin) only, API keys not permitted |
+| **Governance** | `POST` | `/api/v1/feature-flags/toggle` | Toggle feature flag state | Session (Owner/Admin) only, API keys not permitted |
 | **Governance** | `GET` | `/api/v1/approval-requests` | List pending approval requests | Session |
-| **Governance** | `POST` | `/api/v1/approval-requests/:id/review` | Approve or reject pending request | Owner / Admin / Approver |
+| **Governance** | `POST` | `/api/v1/approval-requests/:id/review` | Approve or reject pending request | Session (Owner/Admin/Approver) only, API keys not permitted |
 | **Governance** | `GET` | `/api/v1/mcp-servers` | List registered MCP server gateways | Session / Agent (`governance:read`) |
-| **Evals**      | `POST` | `/api/v1/eval-runs` | Create single eval run | Session / Agent (`eval:write`) |
+| **Evals**      | `POST` | `/api/v1/eval-runs` | Create single eval run | Session (Member+) / Agent (`eval:write`) |
 | **Evals**      | `GET` | `/api/v1/eval-runs` | List evaluation runs | Session / Agent (`eval:read`) |
 | **Evals**      | `GET` | `/api/v1/eval-runs/regression` | Fetch evaluation regression comparison | Session / Agent (`eval:read`) |
-| **Eval Cases** | `POST` | `/api/v1/eval-cases` | Define new evaluation test case | Owner / Admin |
+| **Eval Cases** | `POST` | `/api/v1/eval-cases` | Define new evaluation test case | Session (Owner/Admin) only, API keys not permitted |
 | **Eval Cases** | `GET` | `/api/v1/eval-cases` | List registered evaluation test cases | Session / Agent (`eval:read`) |
-| **Eval Cases** | `POST` | `/api/v1/eval-cases/:id/run` | Execute single evaluation case | Session / Agent (`eval:write`) |
-| **Eval Cases** | `POST` | `/api/v1/eval-suites/run` | Run complete evaluation suite | Session / Agent (`eval:write`) |
-| **Observability**| `GET` | `/api/v1/observability/dashboard` | Fetch aggregated KPI dashboard metrics | Session |
-| **Audit Logs** | `GET` | `/api/v1/audit-logs` | Query organization audit trail | Session |
-| **API Keys**   | `POST` | `/api/v1/api-keys` | Generate new machine API Key | Owner / Admin |
-| **API Keys**   | `GET` | `/api/v1/api-keys` | List organization API Keys | Owner / Admin |
-| **API Keys**   | `DELETE` | `/api/v1/api-keys/:id` | Revoke machine API Key | Owner / Admin |
+| **Eval Cases** | `POST` | `/api/v1/eval-cases/:id/run` | Execute single evaluation case | Session (Member+) / Agent (`eval:write`) |
+| **Eval Cases** | `POST` | `/api/v1/eval-suites/run` | Run complete evaluation suite | Session (Member+) / Agent (`eval:write`) |
+| **Observability**| `GET` | `/api/v1/observability/dashboard` | Fetch aggregated KPI dashboard metrics | Session / Agent (`observability:read`) |
+| **Audit Logs** | `GET` | `/api/v1/audit-logs` | Query organization audit trail | Session / Agent (`audit:read`) |
+| **API Keys**   | `POST` | `/api/v1/api-keys` | Generate new machine API Key | Session (Owner/Admin) only, API keys not permitted |
+| **API Keys**   | `GET` | `/api/v1/api-keys` | List organization API Keys | Session (Owner/Admin) only, API keys not permitted |
+| **API Keys**   | `DELETE` | `/api/v1/api-keys/:id` | Revoke machine API Key | Session (Owner/Admin) only, API keys not permitted |
 
 ---
 

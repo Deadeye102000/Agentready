@@ -188,7 +188,7 @@ describe("API Key Management & Machine Auth Integration Tests", () => {
     assert.equal(testBody.authContext.actorType, "AGENT");
     assert.equal(testBody.authContext.agentId, "agent-1");
     assert.equal(testBody.authContext.organizationId, "org-1");
-    assert.equal(testBody.authContext.role, "AGENT");
+    assert.equal(testBody.authContext.role, undefined);
   });
 
   it("authenticates real V1 protected route using valid Bearer token", async () => {
@@ -270,4 +270,37 @@ describe("API Key Management & Machine Auth Integration Tests", () => {
     });
     assert.equal(revokedRes.statusCode, 401);
   });
+
+  it("validates scopes against API_KEY_SCOPES enum and rejects invalid/mistyped scopes", async () => {
+    const cookie = getSessionCookie("user-1", "org-1");
+
+    // 1. Reject invalid/nonsensical scopes
+    const invalidRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: {
+        name: "Bad Scopes Key",
+        scopes: ["observability:read", "invalid:scope", "fake_scope"]
+      }
+    });
+
+    assert.equal(invalidRes.statusCode, 400);
+
+    // 2. Accept valid scopes including observability:read and audit:read
+    const validRes = await app.inject({
+      method: "POST",
+      url: "/api/v1/api-keys",
+      headers: { cookie },
+      payload: {
+        name: "Valid Scopes Key",
+        scopes: ["observability:read", "audit:read", "executions:read"]
+      }
+    });
+
+    assert.equal(validRes.statusCode, 200);
+    const validBody = JSON.parse(validRes.body);
+    assert.deepEqual(validBody.apiKeyRecord.scopes, ["observability:read", "audit:read", "executions:read"]);
+  });
 });
+
