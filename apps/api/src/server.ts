@@ -12,7 +12,7 @@ import { registerV1Routes } from "./routes/v1/index.js";
 import { workerPlugin } from "./modules/workers/workerPlugin.js";
 import { loggerConfig } from "./utils/logger.js";
 
-export async function buildServer() {
+export async function buildServer(options?: { prisma?: any }) {
   if (env.SENTRY_DSN) {
     Sentry.init({
       dsn: env.SENTRY_DSN,
@@ -30,7 +30,7 @@ export async function buildServer() {
     logger: loggerConfig
   });
 
-  app.decorate("prisma", prisma);
+  app.decorate("prisma", options?.prisma ?? prisma);
 
   await app.register(workerPlugin);
 
