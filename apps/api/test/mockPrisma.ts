@@ -380,6 +380,17 @@ mockPrisma.toolCallTrace.findFirst = async (args: any) => {
   }) || null;
 };
 
+mockPrisma.toolCallTrace.count = async (args: any) => {
+  const where = args?.where || {};
+  return mockStore.toolCallTraces.filter((t) => {
+    if (where.executionId && t.executionId !== where.executionId) return false;
+    if (where.organizationId && t.organizationId !== where.organizationId) return false;
+    if (where.status && t.status !== where.status) return false;
+    if (where.startedAt?.gte && t.startedAt < where.startedAt.gte) return false;
+    return true;
+  }).length;
+};
+
 mockPrisma.toolCallTrace.findMany = async (args: any) => {
   const where = args.where || {};
   let matches = mockStore.toolCallTraces.filter((t) => {
@@ -389,9 +400,28 @@ mockPrisma.toolCallTrace.findMany = async (args: any) => {
     if (where.startedAt?.gte && t.startedAt < where.startedAt.gte) return false;
     return true;
   });
-  if (args.orderBy?.startedAt === "desc") {
-    matches = matches.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  if (args.orderBy) {
+    const orderItem = Array.isArray(args.orderBy) ? args.orderBy[0] : args.orderBy;
+    if (orderItem?.startedAt === "desc") {
+      matches = matches.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    } else if (orderItem?.startedAt === "asc") {
+      matches = matches.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+    }
   }
+  const skip = args.skip || 0;
+  const take = args.take !== undefined ? args.take : matches.length;
+  matches = matches.slice(skip, skip + take);
+
+  if (args.include?.agent) {
+    return matches.map((t) => {
+      const agent = mockStore.agentIdentities.find((a) => a.id === t.agentId);
+      return {
+        ...t,
+        agent: agent ? { id: agent.id, name: agent.name } : null
+      };
+    });
+  }
+
   return matches;
 };
 

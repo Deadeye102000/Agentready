@@ -156,6 +156,45 @@ export class AgentExecutionRepository {
     });
   }
 
+  async listTraces(input: {
+    organizationId: string;
+    executionId?: string;
+    limit?: number;
+    page?: number;
+  }) {
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+    const page = Math.max(input.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ToolCallTraceWhereInput = {
+      organizationId: input.organizationId,
+      ...(input.executionId ? { executionId: input.executionId } : {})
+    };
+
+    const [total, data] = await Promise.all([
+      this.prisma.toolCallTrace.count({ where }),
+      this.prisma.toolCallTrace.findMany({
+        where,
+        orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+        skip,
+        take: limit,
+        include: {
+          agent: { select: { id: true, name: true } }
+        }
+      })
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
   createTrace(data: Prisma.ToolCallTraceUncheckedCreateInput & { organizationId: string }) {
     return this.prisma.toolCallTrace.create({ data });
   }

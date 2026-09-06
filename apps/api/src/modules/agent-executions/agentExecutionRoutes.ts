@@ -35,6 +35,7 @@ import {
   executionListQuerySchema,
   executionParamsSchema,
   reportToolCallResultBodySchema,
+  toolCallTraceListQuerySchema,
   toolCallTraceParamsSchema,
   updateExecutionBodySchema,
   updateToolCallTraceBodySchema
@@ -146,6 +147,19 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
       latencyMs: body.latencyMs,
       isFinalAction: body.isFinalAction,
       actorAgentId: context.agentId
+    });
+  });
+
+  app.get("/tool-call-traces", {
+    preHandler: [requireScope(["executions:read", "traces:read"])]
+  }, async (request) => {
+    const context = requireOrgContext(request);
+    const query = toolCallTraceListQuerySchema.parse(request.query);
+    return service.listTraces({
+      organizationId: context.organizationId,
+      executionId: query.executionId,
+      limit: query.limit,
+      page: query.page
     });
   });
 

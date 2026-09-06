@@ -48,3 +48,9 @@ export const reportToolCallResultBodySchema = z.object({
 export const toolCallTraceParamsSchema = z.object({
   traceId: z.string().min(1)
 });
+
+export const toolCallTraceListQuerySchema = z.object({
+  executionId: z.string().min(1).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});

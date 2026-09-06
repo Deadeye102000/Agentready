@@ -57,6 +57,15 @@ export class AgentExecutionService {
     return this.executions.list(input);
   }
 
+  listTraces(input: {
+    organizationId: string;
+    executionId?: string;
+    limit?: number;
+    page?: number;
+  }) {
+    return this.executions.listTraces(input);
+  }
+
   /**
    * Create a new execution in QUEUED status.
    *
