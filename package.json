@@ -13,14 +13,29 @@
     "test:api": "pnpm --filter @agentready/api test",
     "test:web": "pnpm --filter @agentready/web test",
     "test:mcp": "pnpm --filter @agentready/mcp-server test",
+    "test:integration": "pnpm --filter @agentready/api test:integration",
     "db:validate": "pnpm --filter @agentready/db db:validate",
     "db:generate": "pnpm --filter @agentready/db db:generate",
     "db:migrate": "pnpm --filter @agentready/db db:migrate",
     "db:push": "pnpm --filter @agentready/db db:push",
     "db:seed": "pnpm --filter @agentready/db db:seed",
+    "db:health": "pnpm --filter @agentready/db db:health",
     "postinstall": "pnpm db:generate"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "fastify": "^5.12.3",
+      "fast-uri": ">=3.1.6",
+      "@opentelemetry/core": ">=2.8.0",
+      "next": "^15.5.25",
+      "postcss": ">=8.5.28",
+      "nanoid": ">=3.3.18",
+      "deepmerge-ts": ">=8.0.2",
+      "find-my-way": ">=9.7.0",
+      "sharp": ">=0.35.0"
+    }
   }
 }

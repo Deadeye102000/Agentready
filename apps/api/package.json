@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "NODE_ENV=test node --import tsx --test test/**/*.test.ts"
+    "test": "NODE_ENV=test node --import tsx --test test/**/*.test.ts",
+    "test:integration": "NODE_ENV=test node --import tsx --test test-integration/**/*.integration.test.ts"
   },
   "dependencies": {
     "@agentready/agent-contracts": "workspace:*",
@@ -17,12 +18,15 @@
     "@fastify/cors": "^10.0.1",
     "@fastify/helmet": "^13.1.0",
     "@fastify/rate-limit": "^11.1.0",
-    "@sentry/node": "^8.22.0",
-    "fastify": "^5.2.1",
+    "@sentry/node": "^10.73.0",
+    "fastify": "^5.12.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^22.10.2",
+    "testcontainers": "^12.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
