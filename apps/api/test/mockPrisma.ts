@@ -242,6 +242,9 @@ mockPrisma.taskContract.findFirst = async (args: any) => {
   );
 };
 
+mockPrisma.taskContract.findUnique = mockPrisma.taskContract.findFirst;
+
+
 
 
 mockPrisma.agentExecution.count = async (args: any) => {
@@ -308,6 +311,8 @@ mockPrisma.agentExecution.findFirst = async (args: any) => {
     evalRuns,
   };
 };
+
+mockPrisma.agentExecution.findUnique = mockPrisma.agentExecution.findFirst;
 
 mockPrisma.agentExecution.updateMany = async (args: any) => {
   const { where, data } = args;
@@ -934,6 +939,16 @@ mockPrisma.apiKey = {
     if (data.lastUsedAt !== undefined) item.lastUsedAt = data.lastUsedAt;
     item.updatedAt = new Date();
     return item;
+  },
+  deleteMany: async (args: any) => {
+    const where = args?.where || {};
+    const initialLen = mockStore.apiKeys.length;
+    mockStore.apiKeys = mockStore.apiKeys.filter((k) => {
+      if (where.keyHash && k.keyHash === where.keyHash) return false;
+      if (where.id && k.id === where.id) return false;
+      return true;
+    });
+    return { count: initialLen - mockStore.apiKeys.length };
   }
 };
 
