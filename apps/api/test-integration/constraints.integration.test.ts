@@ -254,4 +254,51 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
     const purgedLogs = await ctx.prisma.auditLog.findMany({ where: { organizationId: org.id } });
     assert.equal(purgedLogs.length, 0, "AuditLogs cascade-delete when the tenant organization is deleted");
   });
+
+  it("enforces immutability on AuditLog: prevents direct UPDATE and DELETE, but allows Organization cascade", async () => {
+    const org = await ctx.prisma.organization.create({
+      data: { name: "Immutable Test Org", slug: `immutable-${Date.now()}` },
+    });
+
+    const log = await ctx.prisma.auditLog.create({
+      data: {
+        organizationId: org.id,
+        actorType: "SYSTEM",
+        action: "system.init",
+        targetType: "system",
+      },
+    });
+
+    // 1. Direct UPDATE must be rejected by the immutability trigger
+    await assert.rejects(
+      async () => {
+        await ctx.prisma.$executeRawUnsafe(
+          `UPDATE "AuditLog" SET action = 'tampered.action' WHERE id = '${log.id}'`
+        );
+      },
+      (err: any) => {
+        assert.match(err.message, /AuditLog records are immutable. Direct UPDATE operations are prohibited/);
+        return true;
+      }
+    );
+
+    // 2. Direct DELETE must be rejected by the immutability trigger
+    await assert.rejects(
+      async () => {
+        await ctx.prisma.$executeRawUnsafe(
+          `DELETE FROM "AuditLog" WHERE id = '${log.id}'`
+        );
+      },
+      (err: any) => {
+        assert.match(err.message, /AuditLog records are immutable. Direct DELETE operations are prohibited/);
+        return true;
+      }
+    );
+
+    // 3. Organization cascade DELETE must succeed
+    await ctx.prisma.organization.delete({ where: { id: org.id } });
+    const remaining = await ctx.prisma.auditLog.findUnique({ where: { id: log.id } });
+    assert.equal(remaining, null);
+  });
 });
+

@@ -57,8 +57,8 @@ export async function setupEphemeralPostgres(): Promise<EphemeralPostgresContext
   const rootBinDir = path.resolve(__dirname, "../../../../node_modules/.bin");
   const envPath = [rootBinDir, nodeBinDir, process.env.PATH].filter(Boolean).join(":");
 
-  // Synchronize database schema using direct prisma executable
-  execSync(`${prismaExecutable} db push --schema "${schemaPath}" --skip-generate`, {
+  // Synchronize database schema by applying all migrations
+  execSync(`${prismaExecutable} migrate deploy --schema "${schemaPath}"`, {
     stdio: "pipe",
     env: {
       ...process.env,
