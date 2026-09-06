@@ -429,15 +429,40 @@ Service Creation implementation (`service.create`) and Side Effects in [agentExe
 
 ---
 
-### B. Tool Call Trace Route Handler (`POST /api/v1/tool-call-traces`)
+### B. Tool Call Trace Route Handlers
 
-Route handler in [agentExecutionRoutes.ts](../apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
+Route handlers in [agentExecutionRoutes.ts](../apps/api/src/modules/agent-executions/agentExecutionRoutes.ts):
 ```typescript
-  app.post("/tool-call-traces", async (request, reply) => {
+  app.get("/tool-call-traces", {
+    preHandler: [requireScope(["executions:read", "traces:read"])]
+  }, async (request) => {
+    const context = requireOrgContext(request);
+    const query = toolCallTraceListQuerySchema.parse(request.query);
+    return service.listTraces({
+      organizationId: context.organizationId,
+      executionId: query.executionId,
+      limit: query.limit,
+      page: query.page
+    });
+  });
+
+  app.post("/tool-call-traces", {
+    preHandler: [requireScope(["executions:write", "traces:write"])]
+  }, async (request, reply) => {
     const context = requireOrgContext(request);
     const body = validateBody(createToolCallTraceBodySchema, request.body);
     const trace = await service.recordToolCall({ ...body, organizationId: context.organizationId });
     return reply.code(201).send(trace);
+  });
+
+  app.patch("/tool-call-traces/:id", {
+    preHandler: [requireScope(["executions:write", "traces:write"])]
+  }, async (request) => {
+    const context = requireOrgContext(request);
+    const params = executionParamsSchema.parse(request.params);
+    const body = validateBody(updateToolCallTraceBodySchema, request.body);
+
+    return service.updateToolCallTrace({ organizationId: context.organizationId, id: params.id, ...body });
   });
 ```
 

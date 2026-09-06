@@ -171,23 +171,24 @@ graph TD
 | Executions | PATCH | `/api/v1/executions/:id` | Update execution status |
 | Tool Governance | POST | `/api/v1/executions/:id/tool-calls/check` | Synchronous pre-flight tool check (ALLOW/BLOCK/WAIT_FOR_APPROVAL, single-flight, circuit breaker, idempotency) |
 | Tool Governance | POST | `/api/v1/tool-calls/:traceId/result` | Report tool execution result (machine-auth only, PENDING to SUCCEEDED/FAILED, state-based idempotency) |
-| Tool Traces | POST | `/api/v1/tool-call-traces` | Record tool call (gate enforcement) |
-| Tool Traces | GET | `/api/v1/tool-call-traces` | List tool traces |
-| Contracts | POST | `/api/v1/task-contracts` | Create task contract |
-| Contracts | GET | `/api/v1/task-contracts` | List task contracts |
-| Contracts | GET | `/api/v1/task-contracts/:id` | Get contract |
+| Tool Traces | GET | `/api/v1/tool-call-traces` | List tool traces (with pagination & execution filtering) |
+| Tool Traces | POST | `/api/v1/tool-call-traces` | Record per-step tool trace event |
+| Tool Traces | PATCH | `/api/v1/tool-call-traces/:id` | Update per-step tool trace |
+| Contracts | POST | `/api/v1/task-contracts` | Create task contract (OWNER/ADMIN only) |
+| Contracts | GET | `/api/v1/task-contracts` | List task contracts (Session / Agent) |
+| Contracts | GET | `/api/v1/task-contracts/:id` | Get contract by ID (Session / Agent) |
 | Governance | GET | `/api/v1/approval-gates` | List approval gates |
-| Governance | PUT | `/api/v1/approval-gates` | Upsert approval gate |
+| Governance | PUT | `/api/v1/approval-gates` | Upsert approval gate (OWNER/ADMIN) |
 | Governance | GET | `/api/v1/feature-flags` | List feature flags |
-| Governance | PUT | `/api/v1/feature-flags` | Upsert feature flag |
-| Governance | POST | `/api/v1/feature-flags/toggle` | Toggle feature flag state |
+| Governance | PUT | `/api/v1/feature-flags` | Upsert feature flag (OWNER/ADMIN) |
+| Governance | POST | `/api/v1/feature-flags/toggle` | Toggle feature flag state (OWNER/ADMIN) |
 | Governance | GET | `/api/v1/approval-requests` | List approval requests |
-| Governance | POST | `/api/v1/approval-requests/:id/review` | Approve or reject request |
+| Governance | POST | `/api/v1/approval-requests/:id/review` | Approve or reject request (OWNER/ADMIN/APPROVER) |
 | Governance | GET | `/api/v1/mcp-servers` | List MCP server registrations |
-| Evals | POST | `/api/v1/eval-runs` | Create eval run |
-| Evals | GET | `/api/v1/eval-runs` | List eval runs |
-| Evals | GET | `/api/v1/eval-runs/regression` | Regression comparison data |
-| Eval Cases | POST | `/api/v1/eval-cases` | Create eval case |
+| Evals | POST | `/api/v1/eval-runs` | Create eval run (eval:write) |
+| Evals | GET | `/api/v1/eval-runs` | List eval runs (eval:read) |
+| Evals | GET | `/api/v1/eval-runs/regression` | Regression comparison data (eval:read) |
+| Eval Cases | POST | `/api/v1/eval-cases` | Create eval case (OWNER/ADMIN only) |
 | Eval Cases | GET | `/api/v1/eval-cases` | List eval cases |
 | Eval Cases | POST | `/api/v1/eval-cases/:id/run` | Run single eval case |
 | Eval Cases | POST | `/api/v1/eval-suites/run` | Run entire eval suite |

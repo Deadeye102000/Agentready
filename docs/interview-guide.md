@@ -99,14 +99,20 @@ AgentReady enforces a dual-authentication model supporting both human dashboard 
 
 ### How does Role-Based Access Control (RBAC) work?
 
-The platform enforces a 5-tier hierarchical RBAC model across tenant organizations:
-- `OWNER`: Full administrative control, billing, API key management, and member role assignment.
-- `ADMIN`: Policy management, feature flags, approval gates, and configuration.
+The platform enforces a 5-tier RBAC model across tenant organizations (`apps/api/src/modules/auth/rbac.ts` and `OrganizationRole` in Prisma):
+- `OWNER`: Full administrative control, billing, API key management, member role assignment, task contracts, and eval cases.
+- `ADMIN`: Policy management, feature flags, approval gates, task contracts, and eval cases.
 - `APPROVER`: Authorized to review and approve/reject pending execution requests (`POST /api/v1/approval-requests/:id/review`).
-- `OPERATOR`: Permitted to initiate agent executions and execute evaluation runs.
+- `MEMBER`: Permitted to initiate agent executions and execute evaluation runs.
 - `VIEWER`: Read-only access to dashboard metrics, execution histories, and audit logs.
 
-Routes enforce RBAC via `requireRole(request.authContext, MinimumRole)` middleware. If a user does not have the required role or belongs to a different organization, a standardized `403 FORBIDDEN` error is returned.
+#### Enforced Access Rules:
+- **Task Contract Creation (`POST /api/v1/task-contracts`)**: Strictly restricted to `OWNER` and `ADMIN` via `requireRole(["OWNER", "ADMIN"])`. `MEMBER`, `VIEWER`, and `APPROVER` receive `403 FORBIDDEN`. Reading contracts (`GET`) is accessible to organization members and machine agents with the `contracts:read` scope.
+- **Eval Case Creation (`POST /api/v1/eval-cases`)**: Strictly restricted to `OWNER` and `ADMIN` via `requireRole(["OWNER", "ADMIN"])`. Reading eval cases (`GET`) is accessible to organization members and machine agents with the `eval:read` scope.
+- **Approval Queue Reviews (`POST /api/v1/approval-requests/:id/review`)**: Restricted to `OWNER`, `ADMIN`, and `APPROVER` via `requireRole(["OWNER", "ADMIN", "APPROVER"])`.
+- **API Key Management (`/api/v1/api-keys`)**: Restricted to `OWNER` and `ADMIN`.
+
+Routes enforce RBAC via `requireRole(allowedRoles)` middleware. If a user does not have an allowed role or belongs to a different organization, a standardized `403 FORBIDDEN` error is returned.
 
 ### How is the app protected against running with hardcoded default secrets in production?
 
@@ -236,19 +242,68 @@ Tasks are work items. Contracts define the rules and expectations for agent exec
 
 Zod gives runtime validation and TypeScript inference. It helps keep API contracts explicit and shared across modules/packages.
 
-## 7. Tool-Call Trace Questions
+## 7. Tool-Call Trace & Synchronous Governance Questions
 
 ### What is a ToolCallTrace?
 
-A `ToolCallTrace` records an individual tool call attempted by an agent. It stores tool name, input, output, error, status, latency, approval link, and timestamps.
+A `ToolCallTrace` records an individual tool call attempted by an agent. It stores tool name, input arguments, execution output, error details, status, latency in milliseconds, approval request links, and audit timestamps.
 
-### Are tool calls always traced?
+### What is the Synchronous Tool Call Governance Protocol?
 
-The intended path is `AgentExecutionService.recordToolCall`, which always creates a trace. This is the controlled service path for tool calls. Future tests should lock this down.
+AgentReady provides a two-phase synchronous governance protocol for external autonomous agents (such as LangChain, AutoGen, CrewAI, or MCP clients):
 
-### What happens when a tool call is risky?
+1. **Pre-Flight Policy Gate (`POST /api/v1/executions/:id/tool-calls/check`)**:
+   - Before executing a tool, the agent submits the intended tool name, capability identifier, arguments, and an optional idempotency key.
+   - The engine checks organization feature flags, capability approval gates, and risk thresholds.
+   - Returns a synchronous decision:
+     - `ALLOW`: Permitted to execute immediately. Creates a trace in `PENDING` status and returns `traceId`.
+     - `REQUIRE_APPROVAL`: Risky capability matching an approval gate. Creates a trace in `AWAITING_APPROVAL`, creates an `ApprovalRequest` in `PENDING`, pauses the execution to `WAITING_FOR_APPROVAL`, and returns `approvalRequestId`.
+     - `BLOCK`: Capability disabled or denied. Creates a trace in `BLOCKED` status and records the policy reason.
+2. **Outcome Reporting (`POST /api/v1/tool-calls/:traceId/result`)**:
+   - Machine-only endpoint restricted to agents holding the `tool_calls:result` scope.
+   - After executing the tool locally, the agent reports status (`SUCCEEDED` or `FAILED`), output data, error message, and latency.
+   - Verifies trace ownership, marks the trace completed, and automatically marks any linked `ApprovalRequest` as `CONSUMED` to prevent replay attacks.
 
-The service checks feature flags and approval gates. If a capability is disabled or blocked, the trace is stored with `BLOCKED`. If approval is required, an approval request is created and the execution can move to `WAITING_FOR_APPROVAL`.
+### Why enforce Single-Flight Concurrency on tool calls?
+
+To prevent race conditions where an autonomous agent dispatches parallel tool calls while previous sensitive actions are pending or waiting for human review. If an execution already has a tool call in `PENDING` or `AWAITING_APPROVAL`, subsequent `/check` requests immediately return `409 CONFLICT` with code `CONCURRENT_TOOL_CALL_DISALLOWED`.
+
+### How do Idempotency and Argument Hashing work?
+
+To guard against network retries and argument tampering:
+1. **Canonical JSON Hashing**: Tool arguments are recursively sorted and hashed using SHA-256 (`argumentHash`). Sensitive fields (e.g. passwords, bearer tokens, API keys) are redacted prior to persistence.
+2. **Idempotency Replays**: When an agent sends an `idempotencyKey`:
+   - If a trace with that key already exists and its `argumentHash` matches, the API returns the cached pre-flight decision without creating duplicate traces or approval requests.
+   - If the key matches but the arguments differ, the API returns `409 CONFLICT` (`IDEMPOTENCY_ARGUMENT_MISMATCH`), preventing replay attacks with modified parameters.
+
+### How does the Human-in-the-Loop Approval & Resume flow work?
+
+When a tool call matches a gate requiring human review:
+1. The pre-flight check returns `REQUIRE_APPROVAL` with an `approvalRequestId`.
+2. The execution transitions to `WAITING_FOR_APPROVAL`.
+3. A human operator reviews the pending action on `/approval-queue` and calls `POST /api/v1/approval-requests/:id/review` (`APPROVED` or `REJECTED`).
+4. If approved:
+   - The trace transitions in-place from `AWAITING_APPROVAL` to `PENDING`.
+   - The execution transitions back to `RUNNING`.
+   - The agent re-checks or executes the tool and submits results to `/result`.
+   - The approval request is permanently marked `CONSUMED`.
+5. If rejected:
+   - The trace transitions to `BLOCKED`.
+   - The execution resumes or terminates according to policy.
+
+### What is the Tool Execution Circuit Breaker?
+
+If an agent execution records **3 consecutive BLOCKED tool calls** (e.g. repeated policy violations, blocked capabilities, or rejected approvals), the Circuit Breaker trips:
+- The execution immediately transitions to `FAILED` with failure reason `circuit_breaker_tripped`.
+- A `SYSTEM` audit log is written.
+- Prevents runaway agent loops from burning API quota or spamming tools after repeated security denials.
+
+### How is the `GET /api/v1/tool-call-traces` endpoint secured?
+
+The endpoint lists tool call traces strictly scoped to the authenticated caller's organization (`request.authContext.organizationId`). It supports:
+- Pagination via `page` and `limit` query parameters (capped at 100).
+- Optional filtering by `executionId` (verifying that the execution belongs to the caller's tenant, returning `404 NOT_FOUND` for foreign execution IDs).
+- Powers the real-time trace timeline on the execution detail page (`/executions/[id]`).
 
 ## 8. Approval Gates And Feature Flags
 
@@ -393,6 +448,27 @@ Prisma gives type-safe database access and clear schema modeling. It fits the Ty
 
 Some JSON fields are used for flexible agent payloads, such as inputs, outputs, eval checks, and metadata. This is useful early, but high-value fields may later become typed relational models.
 
+### How does the database setup handle both local development and cloud production (Dual-Track)?
+
+AgentReady supports two deployment and development tracks without configuration divergence:
+- **Track A (Local Docker)**: Runs a local PostgreSQL container (`docker compose up -d postgres`) on port 5432 using `DATABASE_URL`.
+- **Track B (Hosted / Cloud PostgreSQL - Supabase, Neon, RDS)**:
+  - Uses connection pooling via PgBouncer on port 6543 (`DATABASE_URL=postgresql://...?pgbouncer=true`) for high-concurrency API server connections.
+  - Uses direct TCP connection on port 5432 (`DIRECT_URL=postgresql://...:5432/postgres`) for Prisma schema synchronization and migrations.
+
+### Why use `pnpm db:push` instead of `prisma migrate dev` on hosted databases?
+
+`prisma migrate dev` is designed for greenfield local databases. When connected to a hosted database (such as Supabase) with existing schemas or pooled connections, it detects schema drift and halts with an interactive prompt: `Do you want to reset your database? (y/N)`. In non-interactive CI/CD pipelines or cloud environments, this fails or risks catastrophic data loss.
+`pnpm db:push` (`prisma db push`) synchronizes the Prisma schema with the remote database non-destructively without prompting or modifying migration history tables.
+
+### How do you diagnose database connectivity without `pg_isready`?
+
+Many containerized or cloud environments lack native PostgreSQL client binaries (`pg_isready`). AgentReady includes a standalone diagnostics tool runnable via:
+```bash
+pnpm db:health
+```
+Implemented in `packages/db/scripts/check-db.ts`, it initializes PrismaClient, executes `SELECT 1`, measures network roundtrip latency in milliseconds, redacts credentials in connection logs, and returns clean exit codes (`0` for success, `1` for failure).
+
 ## 12. Frontend Questions
 
 ### What is implemented on the frontend?
@@ -407,7 +483,25 @@ The frontend (`apps/web`) is a full Next.js 15 App Router dashboard with the fol
 - **Register Page** (`/register`): Tenant onboarding flow capturing Organization Name, User Name, Email, and Password; calls `POST /api/v1/auth/register` to establish the initial tenant and admin user.
 - **Sandbox API Route Proxy** (`/api/sandbox`): Server-side App Router endpoint allowing test harness clients to execute sandboxed agent workflows, backed by `apps/web/src/lib/sandboxAuth.ts`.
 
-The frontend uses a centralized API client (`apps/web/src/lib/api.ts`) with typed interfaces and fallback demo data for every endpoint.
+The frontend uses a centralized API client (`apps/web/src/lib/api.ts`) with typed interfaces.
+
+### Why were silent mock fallbacks eliminated from the frontend?
+
+Previously, `apps/web/src/app/page.tsx` and `/api/sandbox` caught backend errors and silently fell back to hardcoded mock data. While this kept the UI looking pretty during early mockups, it created dangerous failure blindness:
+- Developers and operators could not tell if the backend API was offline, misconfigured, or returning `401 UNAUTHORIZED`.
+- Silent fallbacks in `/api/sandbox` allowed test runners to believe simulated executions were succeeding when the API was actually unreachable.
+
+AgentReady replaced silent fallbacks with **explicit user-facing error boundaries and loading states**:
+- The dashboard displays a prominent red warning banner when the backend API fails or requires authentication (`Failed to load live dashboard data: ...`), with an authenticated retry button.
+- The sandbox route returns true upstream HTTP status codes (`400`, `401`, `502`) with structured error messages rather than fictitious responses.
+
+### How does the Sandbox API Route Proxy validate incoming requests?
+
+`apps/web/src/app/api/sandbox/route.ts` enforces strict Zod schema validation (`sandboxBodySchema`):
+- `agentType`: must be one of `"support_agent"`, `"coding_agent"`, or `"research_agent"`.
+- `action`: optional string (`"approve"` requires a non-empty `executionId`).
+- `input`: optional object for tool parameters.
+Malformed JSON or schema mismatches immediately return `400 BAD_REQUEST` with actionable error details before any downstream backend calls are initiated.
 
 ### How does the approval queue work?
 
@@ -428,31 +522,34 @@ Response types are defined locally in `api.ts` rather than imported from `packag
 The repo is verified across all workspaces:
 - `pnpm typecheck` (zero TypeScript errors across all 7 workspace projects)
 - `pnpm build` (Next.js 15 production bundle + API TypeScript compilation succeed)
-- `pnpm test` (all 117 tests pass, 0 failures, 100% passing)
+- ### How many tests are there and how do they run?
 
-### How many tests are there and how do they run?
-
-**117 total tests** across three workspaces, using **Node's built-in test runner** (`node --import tsx --test`) — zero third-party test runners needed:
+**138 total tests** across 31 suites in three workspaces, using **Node's built-in test runner** (`node --import tsx --test`) across two tiers:
 
 ```bash
-pnpm test        # all workspaces (117 tests)
-pnpm test:api    # API integration tests (91 tests, 18 suites)
-pnpm test:web    # Frontend smoke & auth tests (23 tests, 7 suites)
-pnpm test:mcp    # MCP server Bearer auth & stdio integration tests (3 tests, 1 suite)
+# Tier 1: Fast In-Memory Unit Tests (128 tests, 28 suites, ~2.5s, no Docker)
+pnpm test        # all workspaces
+pnpm test:api    # API unit tests (96 tests, 19 suites)
+pnpm test:web    # Frontend smoke & contracts (29 tests, 8 suites)
+pnpm test:mcp    # MCP server unit tests (3 tests, 1 suite)
+
+# Tier 2: Real PostgreSQL Integration Tests (10 tests, 3 suites, requires Docker)
+pnpm test:integration # Testcontainers ephemeral postgres:16-alpine
 ```
 
-### What do the API integration tests cover?
+### What do the API unit tests cover?
 
-18 comprehensive test suites in `apps/api/test`:
+19 comprehensive test suites in `apps/api/test`:
 - **Auth** (5): registration, login, invalid credentials, session cookie verification, `/me` endpoint.
 - **API Keys & Machine Auth** (6): key generation with prefix (`ar_live_` / `ar_test_`), SHA-256 database hashing, scoped permissions, invalid key rejection, session cookie vs Bearer key dual auth, audit logging on issuance and revocation (with strict secret exclusion).
 - **API Key Scope Enforcement** (8): exact scope verification, resource wildcards (`executions:*`), full superuser scopes (`admin`, `all`), write route rejection for read-only keys (403), and immunity for session users.
 - **Environment & Startup Protection** (5): missing `AUTH_SESSION_SECRET` fail-fast in production, fallback in dev, sub-process startup exit code 1.
 - **Execution State Machine** (6): valid/invalid lifecycle transitions, terminal state protection.
 - **Tenancy** (3): cross-org isolation, 403/404 boundary enforcement, foreign ID injection prevention.
-- **Role-Based Access Control (RBAC)** (10): hierarchical role enforcement (Owner > Admin > Approver > Operator > Viewer), 403 on insufficient privilege for task contracts, eval cases, gates, and flags.
+- **Role-Based Access Control (RBAC)** (10): role enforcement (`OWNER` > `ADMIN` > `APPROVER` > `MEMBER` > `VIEWER`), 403 on insufficient privilege for task contracts, eval cases, gates, and flags.
 - **Background Execution Worker** (3): poller claiming `QUEUED` executions, atomic transition to `RUNNING`, `SYSTEM` audit log generation.
-- **Synchronous Tool Call Governance & Lifecycle** (9): `/tool-calls/check` pre-flight gate, single-flight 409 enforcement, canonicalized argument hashing & secret redaction, state-based idempotency caching & mismatch 409, complete approval-then-resume path (AWAITING_APPROVAL -> APPROVED -> in-place PENDING transition -> CONSUMED approval -> result), reject & expire trace transitions to BLOCKED, circuit breaker trip after 3 consecutive blocks, dedicated scopes (`tool_calls:check`, `tool_calls:result`), and machine-only `/result` endpoint.
+- **Synchronous Tool Call Governance & Lifecycle** (34): `/tool-calls/check` pre-flight gate, single-flight 409 enforcement, canonicalized argument hashing & secret redaction, state-based idempotency caching & mismatch 409, complete approval-then-resume path (AWAITING_APPROVAL -> APPROVED -> in-place PENDING transition -> CONSUMED approval -> result), reject & expire trace transitions to BLOCKED, circuit breaker trip after 3 consecutive blocks, dedicated scopes (`tool_calls:check`, `tool_calls:result`), and machine-only `/result` endpoint.
+- **Tool Call Traces Listing** (4): `GET /api/v1/tool-call-traces` pagination, execution ID filtering, and cross-tenant access rejection.
 - **Approval Gates** (~11): wildcard gate patterns, risk thresholds, `WAITING_FOR_APPROVAL` pause, approval/rejection lifecycle.
 - **Feature Flags** (6): blocked capabilities, toggle API, auto-approval override, audit log writes.
 - **Eval Framework** (6): case creation, scoring formula, suite runs, flag-blocked eval.
@@ -461,7 +558,7 @@ pnpm test:mcp    # MCP server Bearer auth & stdio integration tests (3 tests, 1 
 
 ### What are the frontend smoke tests?
 
-23 tests in `apps/web/test/smoke.test.ts` running without browser overhead:
+29 tests across 8 suites in `apps/web/test/smoke.test.ts` running without browser overhead:
 - Fallback dashboard data shapes (all 8 metrics ≥ 0, required fields present)
 - Approval request fallback data (correct fields, `PENDING` status, no secrets in payload)
 - `ApiResult<T>` type contract shape
@@ -469,6 +566,7 @@ pnpm test:mcp    # MCP server Bearer auth & stdio integration tests (3 tests, 1 
 - Regression data shape and delta arithmetic
 - Feature flag and approval gate required fields and valid mode values
 - **Sandbox Route Production Secret Protection** (4): verifies `getApiKey()` throws in production if `SANDBOX_AGENT_API_KEY` is unset or matches dev default, allows valid custom keys in production, and defaults safely in development.
+- **Sandbox Route Schema Validation** (6): verifies HTTP 400 rejection for malformed JSON, non-object bodies, missing agentType, invalid agentType values, missing executionId on approve actions, and unsupported actions.
 
 ### What is the automated test architecture?
 
@@ -505,11 +603,16 @@ Treating agent activity as governed execution rather than generic CRUD. The core
 ### What was recently resolved?
 
 Several previously identified weak spots have now been fully implemented and verified:
-1. **Role-Based Access Control (RBAC)**: Implemented 5 hierarchical roles (`OWNER`, `ADMIN`, `APPROVER`, `OPERATOR`, `VIEWER`) and `requireRole` middleware.
+1. **Role-Based Access Control (RBAC)**: Implemented 5 hierarchical roles (`OWNER`, `ADMIN`, `APPROVER`, `MEMBER`, `VIEWER`) and `requireRole` middleware.
 2. **Frontend Auth UI**: Added `/login` and `/register` pages with session cookie handling.
 3. **Execution Background Worker**: Added in-process `workerPlugin` polling and executing `QUEUED` tasks with atomic claiming.
 4. **Production Secret Hardening**: Prevented silent fallback to hardcoded development secrets in production for both API and web apps.
 5. **Machine API Keys**: Dual-auth layer with SHA-256 key hashing and scoped permissions.
+6. **Eliminated Silent Mock Fallbacks**: Replaced silent catch blocks in `apps/web/src/app/page.tsx` and `/api/sandbox` with explicit user-visible error banners, loading skeletons, and upstream HTTP status code propagation (400, 401, 502).
+7. **Tool Call Observability Endpoint**: Implemented missing `GET /api/v1/tool-call-traces` with pagination, execution filtering, and tenant isolation, powering the live timeline on `/executions/[id]`.
+8. **Strict Zod Boundary Validation**: Replaced unsafe `as { id: string }` casting in `evalRunRoutes.ts` and unvalidated body forwarding in `/api/sandbox` with strict runtime Zod schemas.
+9. **Zero-Dependency Database Health Diagnostics**: Built `pnpm db:health` via Prisma `$queryRaw` to provide reliable DB connection verification without requiring native `pg_isready` binaries.
+10. **Resolved High-Severity Security Findings**: Upgraded Fastify and pinned patched transitive dependencies (`fast-uri >= 3.1.6`, `@opentelemetry/core >= 2.8.0`), clearing 17 high-severity audit vulnerabilities.
 
 ### What would you improve next?
 
@@ -567,8 +670,87 @@ Because dependencies flow strictly in one direction:
 #### 2. How does the Background Worker attach without coupling?
 `buildServer()` in `server.ts` registers `workerPlugin()` via Fastify's plugin lifecycle. The worker interacts with `AgentExecutionService` and `AgentExecutionRepository` through standardized interfaces, keeping execution polling decoupled from request handling.
 
-#### 3. Where are the highest-cohesion modules?
-Leaf modules show exceptionally high internal cohesion:
-- **Sandbox API Route Proxy**: Cohesion `0.70` (focused proxy layer with `sandboxAuth`).
-- **Frontend Auth Pages & Session Client**: Cohesion `0.42` (`/login`, `/register`, `getMe()`).
-- **Error Handling & Response Mapping**: Cohesion `0.33` (`HttpError`, `registerErrorHandlers`, Prisma mapper).
+#### 3. Why does `AgentExecutionRepository` connect Canonical JSON & Deterministic Hashing to HTTP Errors & Request Validation and Agent Execution Routes & State Machine? (High Betweenness Centrality: 0.022)
+This is the most critical architectural intersection in the codebase:
+- **The Problem**: In autonomous AI agent operations, a repository cannot be a "dumb" CRUD table accessor. It must act as the **governance anchor** where cryptographic verification, state machine constraints, and database transactions converge.
+- **The Trace**:
+  1. **Route Layer (`Agent Execution Routes`)**: An incoming agent tool check hits `POST /api/v1/executions/:id/tool-calls/check` and is validated via `checkToolCallBodySchema`.
+  2. **Cryptographic Layer (`Canonical JSON & Deterministic Hashing`)**: `AgentExecutionService` receives the request and calls `canonicalizeJson()` and `computeArgumentsHash()`. This recursively sorts object keys and computes a SHA-256 digest (`argumentHash`) while redacting sensitive tokens.
+  3. **State Machine Layer (`State Machine & HTTP Errors`)**: The service asserts valid lifecycle states via `assertExecutionTransition(from, to)`. If an agent attempts to execute a tool on a terminal or waiting execution, or violates single-flight concurrency, an `HttpError` (400, 404, or 409) is thrown.
+  4. **Persistence Layer (`AgentExecutionRepository`)**: The repository bridges these worlds: it checks `findIdempotencyKey()` using the canonical hash (returning cached decisions for duplicate requests or throwing `409 IDEMPOTENCY_ARGUMENT_MISMATCH` if arguments were tampered with), checks `findPendingTrace()` for single-flight concurrency, and persists the trace via `createTrace()`.
+- **Architectural Takeaway**: `AgentExecutionRepository` has high betweenness centrality because it is the **single point of truth** where protocol safety rules, state machine transitions, and database persistence intersect.
+
+#### 4. Why does `HttpError` connect HTTP Errors & Request Validation to Canonical JSON & Deterministic Hashing, Audit Logging & Eval Run Service, Agent Execution Routes & State Machine, and Error Codes & Fastify Error Handler? (High Betweenness Centrality: 0.018)
+- `HttpError` (`apps/api/src/lib/httpError.ts`) functions as the **universal cross-cutting error currency** across all 8 domain modules.
+- Rather than allowing domain modules to invent idiosyncratic error formats or throw raw strings/generic Errors:
+  - `agentExecutionService.ts` throws `HttpError(409, "CONCURRENT_TOOL_CALL_DISALLOWED")` and `HttpError(409, "IDEMPOTENCY_ARGUMENT_MISMATCH")`.
+  - `executionStateMachine.ts` throws `HttpError(400, "Cannot transition agent execution...")`.
+  - `evalRunService.ts` and `taskContractService.ts` throw `HttpError(404, "NOT_FOUND")` and `HttpError(403, "FORBIDDEN")`.
+  - Fastify's centralized error handler (`apps/api/src/lib/errors.ts`) catches all instances of `HttpError` and normalizes them into standard `{ error: { code, message, details: { requestId } } }` JSON responses.
+- High betweenness centrality here is a **positive architectural indicator**: it demonstrates strict adherence to a single error model across the entire modular monolith.
+
+#### 5. Should "HTTP Errors & Request Validation" be split into smaller, more focused modules? (Cohesion: 0.067)
+- **Root Cause of Low Cohesion**: Graph clustering algorithms (Louvain/Leiden) group nodes based on shared edge density. Because 54 disparate schema validators and helper functions across multiple domain packages all reference `HttpError`, the graph clustered them into a single synthetic community named "HTTP Errors & Request Validation".
+- **Codebase Reality**: The files are **already physically split** by domain module (`authSchemas.ts`, `agentExecutionSchemas.ts`, `evalRunSchemas.ts`, `taskContractSchemas.ts`, `httpError.ts`).
+- **Future Seam to Watch**: The only architectural coupling to address upon distributed extraction is in `executionStateMachine.ts`: currently, `assertExecutionTransition` directly throws `HttpError` with an HTTP status code (400). When extracting the execution runner into a standalone worker process (e.g. BullMQ/Temporal), domain state transitions should throw a pure domain error (e.g. `InvalidStateTransitionError`), leaving HTTP mapping to the API edge.
+
+#### 6. Should "Interactive Sandbox API & Controller" be split into smaller, more focused modules? (Cohesion: 0.057)
+- **Root Cause of Low Cohesion**:
+  1. Graph analysis clustered the Next.js API route proxy (`route.ts`), the frontend React controller (`SandboxController.tsx`), and the separate Approval Queue dashboard page (`ApprovalQueuePage.tsx`) into one community due to shared approval terminology.
+  2. The original `/api/sandbox/route.ts` was a 437-line monolithic switch-case containing 3 distinct simulation scenarios (`finops`, `rogue`, `eval`) and supervisor approval actions inline.
+- **Solution Applied**:
+  - The monolithic route was refactored into a modular architecture under `apps/web/src/lib/sandbox/`:
+    - `client.ts`: Dedicated backend fetch wrapper handling session cookie forwarding and machine Bearer tokens.
+    - `scenarios/approve.ts`: Isolated approval resolution and execution completion logic.
+    - `scenarios/finops.ts`: Isolated FinOps refund approval simulation.
+    - `scenarios/rogue.ts`: Isolated rogue agent policy-blocking and audit log simulation.
+    - `scenarios/eval.ts`: Isolated eval CI/CD verification and regression delta simulation.
+  - The Next.js route handler (`apps/web/src/app/api/sandbox/route.ts`) was reduced from 437 lines to a lightweight, 60-line controller focused strictly on Zod request validation and dispatching.
+  - This dramatically increased cohesion, isolated scenario maintenance, and made the sandbox trivial to extend with new agent types.
+
+## 18. Testing Architecture: In-Memory Mocks vs. Real PostgreSQL Testcontainers
+
+### What is the testing philosophy in this repository?
+
+The repository implements a **dual-tier testing pyramid**:
+1. **Tier 1 — Rapid In-Memory Unit Suite (`pnpm test`, 128 tests)**:
+   - Covers 100% of route logic, Zod validation, state machine transitions, RBAC enforcement, eval scoring math, and sandbox controllers.
+   - Built on Node's native test runner (`tsx`) and an in-memory Prisma mock store (`mockPrisma.ts`).
+   - Executes in **~2-3 seconds total** without requiring Docker, background daemon services, or network calls.
+2. **Tier 2 — Ephemeral Containerized Integration Suite (`pnpm test:integration`)**:
+   - Provisions a real, isolated PostgreSQL database per test run using **Testcontainers** (`postgres:16-alpine`).
+   - Specifically targets database behaviors that in-memory mocks fundamentally cannot verify.
+
+### What are the failure modes of testing exclusively against an in-memory mock?
+
+In-memory mocks are excellent for business logic verification, but they introduce severe false positives in three critical persistence areas:
+1. **Composite Unique Constraints (`@@unique`)**:
+   - In-memory arrays usually only filter by primary key `id` or a single field.
+   - Real PostgreSQL enforces composite indexes at the storage engine level. For example:
+     - `IdempotencyKey @@unique([executionId, key])`: An idempotency key must be unique per execution, but the identical key string can be legitimately reused across different executions.
+     - `ToolCallTrace @@unique([executionId, toolCallId])`: Prevents trace ID collisions within an execution.
+     - `ApiKey.keyHash`: Must enforce global uniqueness to prevent token collision.
+   - Without real PostgreSQL, unique constraint bugs will slip into production unnoticed.
+2. **Foreign Key Lifecycle Actions (`onDelete: SetNull` vs. `onDelete: Cascade`)**:
+   - If an employee leaves or an agent identity is deleted, what happens to their audit logs?
+   - In enterprise compliance (SOC 2, ISO 27001), deleting an actor must **never destroy the audit trail** of what they authorized. The schema specifies `actorUserId: String? @relation(..., onDelete: SetNull)`.
+   - However, when an enterprise customer cancels and exercises their GDPR "Right to be Forgotten", deleting the `Organization` must **cascade** and purge all tenant-scoped data (`onDelete: Cascade`).
+   - In-memory mocks do not execute foreign key cascade triggers or foreign key nullification; only real PostgreSQL proves this contract holds.
+3. **Atomic Concurrency & Connection Pool Saturation**:
+   - The background execution runner polls for `QUEUED` executions and claims them using:
+     ```ts
+     prisma.agentExecution.updateMany({
+       where: { id: execId, status: "QUEUED" },
+       data: { status: "RUNNING" }
+     })
+     ```
+   - In JavaScript, single-threaded event loop mocks simulate atomic operations trivially. In production, 10 or 20 worker processes hit the database simultaneously over distinct TCP connections.
+   - Testing against real PostgreSQL with a properly tuned `connection_limit` proves that PostgreSQL's MVCC row-level locking guarantees exactly one worker succeeds in transitioning the row, while the other 9 receive `count: 0`.
+
+### How is the Testcontainers architecture designed?
+
+- **Container Image**: `postgres:16-alpine` (minimal, fast startup).
+- **Hard Requirement**: Docker is a hard requirement for `pnpm test:integration`. There is zero silent fallback to in-memory mocks, guaranteeing that integration assertions are never skipped by mistake.
+- **Reaper (Ryuk)**: Testcontainers deploys an ephemeral Ryuk sidecar container that monitors the parent process socket. Even if the Node process is killed abruptly with `SIGKILL` or crashes during an assertion, Ryuk reaps and purges the PostgreSQL container immediately, preventing dangling Docker containers.
+- **Explicit Teardown**: Normal test runs execute `teardownEphemeralPostgres()` in `afterAll`, cleanly closing Prisma connection pools and stopping the container.
+- **Explicit Connection Limit**: The container connection URL is configured with `&connection_limit=20`, deliberately set higher than the concurrent worker count (10 workers). This prevents client-side connection queuing and forces genuinely concurrent TCP connections against PostgreSQL.
