@@ -243,29 +243,36 @@ describe("API Key Scope Enforcement Tests", () => {
       assert.match(body.error.message, /eval:write/i);
     });
 
-    it("confirms a key with 'all' or 'admin' scope has access to read and write routes", async () => {
-      const { rawKey } = await createApiKeyWithScopes(["all"]);
-
-      // Can read executions
-      const readRes = await app.inject({
-        method: "GET",
-        url: "/api/v1/executions",
-        headers: { authorization: `Bearer ${rawKey}` }
-      });
-      assert.equal(readRes.statusCode, 200);
-
-      // Can write executions
-      const writeRes = await app.inject({
+    it("rejects creation of an API key with wildcard 'all' scope (Human Governance Invariant)", async () => {
+      // Per the Human Governance Invariant, wildcard/admin scopes may not be
+      // assigned to API keys via the API. The Zod validation now uses
+      // ASSIGNABLE_API_KEY_SCOPES which excludes "all", "admin", and "*".
+      const cookie = getSessionCookie("user-1", "org-1");
+      const res = await app.inject({
         method: "POST",
-        url: "/api/v1/executions",
-        headers: { authorization: `Bearer ${rawKey}` },
+        url: "/api/v1/api-keys",
+        headers: { cookie },
         payload: {
-          projectId: "proj-1",
-          agentId: "agent-1",
-          objective: "Superuser execution"
+          name: "Attempted wildcard key",
+          scopes: ["all"]
         }
       });
-      assert.equal(writeRes.statusCode, 201);
+      // Must be rejected with 400 Bad Request
+      assert.equal(res.statusCode, 400, `Expected 400 for wildcard scope, got ${res.statusCode}: ${res.body}`);
+    });
+
+    it("rejects creation of an API key with 'admin' scope (Human Governance Invariant)", async () => {
+      const cookie = getSessionCookie("user-1", "org-1");
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/api-keys",
+        headers: { cookie },
+        payload: {
+          name: "Attempted admin key",
+          scopes: ["admin"]
+        }
+      });
+      assert.equal(res.statusCode, 400, `Expected 400 for admin scope, got ${res.statusCode}: ${res.body}`);
     });
 
     it("confirms session-authenticated ADMIN user has full access to reads and writes", async () => {

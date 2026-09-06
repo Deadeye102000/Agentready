@@ -2,6 +2,11 @@ import type { FastifyRequest } from "fastify";
 import { HttpError } from "../../lib/httpError.js";
 import type { SystemRole } from "./rbac.js";
 
+/**
+ * Full set of known scope tokens, including internal-only wildcard aliases used
+ * by hasScope() matching. Do NOT use this for Zod validation of API requests —
+ * use ASSIGNABLE_API_KEY_SCOPES instead.
+ */
 export const API_KEY_SCOPES = [
   "*",
   "admin",
@@ -21,6 +26,31 @@ export const API_KEY_SCOPES = [
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+
+/**
+ * Scopes that can be assigned to an API key via POST /api-keys.
+ * Intentionally excludes wildcard/admin aliases ("*", "admin", "all"):
+ * per the Human Governance Invariant, admin-level actions (feature flags,
+ * approval gate policy, API key management) require a human session and
+ * cannot be granted to machine agents through any scope combination.
+ */
+export const ASSIGNABLE_API_KEY_SCOPES = [
+  "executions:read",
+  "executions:write",
+  "eval:read",
+  "eval:write",
+  "contracts:read",
+  "governance:read",
+  "traces:read",
+  "traces:write",
+  "tool_calls:check",
+  "tool_calls:result",
+  "observability:read",
+  "audit:read",
+] as const;
+
+export type AssignableApiKeyScope = (typeof ASSIGNABLE_API_KEY_SCOPES)[number];
+
 
 export const ROLE_SCOPES: Record<SystemRole, readonly string[]> = {
   OWNER: ["*"],

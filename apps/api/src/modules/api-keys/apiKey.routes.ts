@@ -4,12 +4,14 @@ import { validateBody } from "../../lib/validate.js";
 import { AuditRepository } from "../audit/auditRepository.js";
 import { AuditService } from "../audit/auditService.js";
 import { requireRole } from "../auth/rbac.js";
-import { API_KEY_SCOPES } from "../auth/scopes.js";
+import { ASSIGNABLE_API_KEY_SCOPES } from "../auth/scopes.js";
 import { ApiKeyService } from "./apiKey.service.js";
 
 const apiKeyBodySchema = z.object({
   name: z.string().min(1),
-  scopes: z.array(z.enum(API_KEY_SCOPES)).optional()
+  // Only ASSIGNABLE scopes accepted — wildcard/admin aliases ("*", "admin", "all")
+  // are intentionally excluded per the Human Governance Invariant.
+  scopes: z.array(z.enum(ASSIGNABLE_API_KEY_SCOPES)).optional()
 });
 
 export async function registerApiKeyRoutes(app: FastifyInstance) {

@@ -456,7 +456,11 @@ model AuditLog {
   targetId       String?
   metadata       Json           @default("{}")
   createdAt      DateTime       @default(now())
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict (not Cascade) is intentional: audit logs are compliance evidence.
+  // An organization with existing audit logs CANNOT be deleted until all logs are
+  // explicitly archived/exported. This prevents audit trail erasure during offboarding.
+  // See: Human Governance Invariant — agents and org admins cannot erase their own evidence.
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   actorUser      User?          @relation("AuditLogUser", fields: [actorUserId], references: [id], onDelete: SetNull)
   actorAgent     AgentIdentity? @relation(fields: [actorAgentId], references: [id], onDelete: SetNull)
 

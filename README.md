@@ -7,7 +7,7 @@
 [![Fastify](https://img.shields.io/badge/Fastify-5.0-green.svg)](https://fastify.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.1-indigo.svg)](https://www.prisma.io/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
-[![Test Suite](https://img.shields.io/badge/Tests-138%20passing-brightgreen.svg)](#-testing--verification)
+[![Test Suite](https://img.shields.io/badge/Tests-178%20passing-brightgreen.svg)](#-testing--verification)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -299,19 +299,16 @@ erDiagram
 AgentReady implements a dual-tier testing strategy combining **fast in-memory unit tests** for rapid developer velocity and **containerized integration tests** for real PostgreSQL validation.
 
 ```bash
-# 1. Run all fast unit tests (API + Web + MCP, 128 tests) - No Docker needed
-pnpm test
-
-# Run API unit tests only (96 tests)
+# 1. Run API unit tests (125 tests, 29 suites) — no Docker needed
 pnpm test:api
 
-# Run Frontend smoke tests only (29 tests)
+# Run frontend smoke tests (35 tests)
 pnpm test:web
 
-# Run MCP Server unit tests only (3 tests)
+# Run MCP server unit tests (3 tests)
 pnpm test:mcp
 
-# 2. Run Real PostgreSQL Integration Tests (10 tests, 3 suites) - Requires Docker (Testcontainers)
+# 2. Run real PostgreSQL integration tests (15 tests, 4 suites) — requires Docker
 pnpm test:integration
 
 # Run TypeScript static typecheck across all workspaces
@@ -321,39 +318,45 @@ pnpm typecheck
 pnpm build
 ```
 
-### Test Suite Summary (138 Total Tests, 0 Failures)
+### Test Suite Summary (178 Total Tests, 0 Failures)
 
-The test suite covers **138 total tests across 31 suites**, split into two distinct execution tiers:
+The test suite covers **178 total tests across 33 suites**, split into two distinct execution tiers:
 
-#### Tier 1: In-Memory Unit Suite (128 Tests across 28 Suites — `pnpm test`)
-*Runs in ~2.5 seconds using Node's native test runner (`node --import tsx --test`) and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
+#### Tier 1: Unit Suite (163 Tests across 29 API Suites + 35 Web + 3 MCP — `pnpm test:api / test:web / test:mcp`)
+*API tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
 
 | Test Suite | Tests | Target File | Features Covered |
 |:---|:---:|:---|:---|
 | **Auth Suite** | 5 | [`apps/api/test/auth.test.ts`](apps/api/test/auth.test.ts) | User registration, login, session validation, cookie issuance |
 | **Execution State Machine** | 6 | [`apps/api/test/execution-state-machine.test.ts`](apps/api/test/execution-state-machine.test.ts) | Valid/invalid state transitions, terminal status protection |
 | **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
-| **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
+| **Feature Flags** | 5 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
 | **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
-| **Eval Framework** | 6 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs |
+| **Eval Framework** | 7 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs, audit logging |
 | **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
-| **Critical E2E Flows** | 11 | [`apps/api/test/critical-flows.test.ts`](apps/api/test/critical-flows.test.ts) | End-to-end flow: Register $\to$ Contract $\to$ Execution $\to$ Trace $\to$ Approval $\to$ Eval |
-| **Tool Call Traces Endpoint** | 4 | [`apps/api/test/toolCallTraces.test.ts`](apps/api/test/toolCallTraces.test.ts) | GET `/api/v1/tool-call-traces` listing, filtering, pagination, tenant isolation |
-| **Sync Tool Call Lifecycle** | 34 | [`apps/api/test/sync-tool-calls.test.ts`](apps/api/test/sync-tool-calls.test.ts) | Synchronous tool execution, lifecycle state transitions, approval locks |
-| **Background Worker** | 3 | [`apps/api/test/worker.test.ts`](apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, system logging |
-| **RBAC Protection** | 4 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`) |
-| **API Keys & Machine Auth** | 4 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage |
-| **Frontend Smoke & Contracts**| 29 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math, sandbox production secret & Zod validation |
+| **Critical E2E Flows** | 10 | [`apps/api/test/critical-flows.test.ts`](apps/api/test/critical-flows.test.ts) | End-to-end flow: Register → Contract → Execution → Trace → Approval → Eval |
+| **Tool Call Traces Endpoint** | 3 | [`apps/api/test/toolCallTraces.test.ts`](apps/api/test/toolCallTraces.test.ts) | GET `/api/v1/tool-call-traces` listing, filtering, pagination, tenant isolation |
+| **Sync Tool Call Governance** | 8 | [`apps/api/test/toolCallGovernance.test.ts`](apps/api/test/toolCallGovernance.test.ts) | Synchronous tool execution, lifecycle state transitions, approval locks |
+| **Background Worker** | 5 | [`apps/api/test/worker.test.ts`](apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, CONFIG_ERROR fast-fail, webhook dispatch |
+| **Idempotency Purge** | 1 | [`apps/api/test/idempotencyPurge.test.ts`](apps/api/test/idempotencyPurge.test.ts) | Expired idempotency key cleanup and audit logging |
+| **RBAC Protection** | 10 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`); machine API key rejection on admin routes |
+| **Role Revocation Regression** | 2 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Mid-session ADMIN→VIEWER demotion immediately 403s; membership removal immediately 401s — verifies role is re-read from DB on every request |
+| **RBAC Route Matrix** | 5 | [`apps/api/test/rbacMatrix.test.ts`](apps/api/test/rbacMatrix.test.ts) | Parameterized matrix: unauthenticated 401, VIEWER read-only, MEMBER ops boundary, scoped API key, machine-only boundary |
+| **API Key Scope Enforcement** | 14 | [`apps/api/test/scopes.test.ts`](apps/api/test/scopes.test.ts) | `hasScope` unit tests; route enforcement per scope; wildcard scope rejection (Human Governance Invariant) |
+| **API Keys & Machine Auth** | 4 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage, invalid scope rejection (400) |
+| **Env Validation** | 2 | [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts) | Production-mode validation: rejects unset or default `AUTH_SESSION_SECRET` |
+| **Frontend Smoke & Contracts** | 35 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math, sandbox rate-limit (429), Zod validation |
 | **MCP Server Unit Tests** | 3 | [`apps/mcp-server/test/mcpServer.test.ts`](apps/mcp-server/test/mcpServer.test.ts) | Bearer API key auth, stdio subprocess spawn, missing credential rejection |
 
-#### Tier 2: Real PostgreSQL Integration Suite (10 Tests across 3 Suites — `pnpm test:integration`)
-*Runs against an ephemeral `postgres:16-alpine` instance provisioned by Testcontainers (`@testcontainers/postgresql`). **Docker is a hard requirement with no automatic fallback**.*
+#### Tier 2: Real PostgreSQL Integration Suite (15 Tests across 4 Suites — `pnpm test:integration`)
+*Runs against an ephemeral `postgres:16-alpine` instance provisioned by Testcontainers (`@testcontainers/postgresql`). Applies all migrations from empty on every run. **Docker is a hard requirement with no automatic fallback**.*
 
 | Test Suite | Tests | Target File | Features Covered |
 |:---|:---:|:---|:---|
-| **Composite Constraints & Audit Retention** | 4 | [`apps/api/test-integration/constraints.integration.test.ts`](apps/api/test-integration/constraints.integration.test.ts) | Real Postgres `P2002` violations on `ApiKey.keyHash`, `IdempotencyKey [executionId, key]`, `ToolCallTrace [executionId, toolCallId]`; AuditLog retention (`onDelete: SetNull`) on User/Agent deletion vs. cascade (`onDelete: Cascade`) on Organization deletion |
-| **Real Fastify & Postgres MCP Auth** | 5 | [`apps/api/test-integration/mcp-auth.integration.test.ts`](apps/api/test-integration/mcp-auth.integration.test.ts) | End-to-end tool execution (`list_task_contracts`, `list_available_tools`), SHA-256 database lookup, tenant isolation, DB `lastUsedAt` update, 401 on unregistered/revoked/expired keys |
-| **Concurrent Claim Race** | 1 | [`apps/api/test-integration/concurrency.integration.test.ts`](apps/api/test-integration/concurrency.integration.test.ts) | 10 parallel `PrismaClient` worker connections racing with atomic `updateMany` claiming 20 queued executions with 0 double-claims |
+| **Composite Constraints & Audit Retention** | 4 | [`apps/api/test-integration/constraints.integration.test.ts`](apps/api/test-integration/constraints.integration.test.ts) | Real Postgres `P2002` violations on `ApiKey.keyHash`; AuditLog retention (`onDelete: SetNull`) on User/Agent deletion; org deletion **blocked** (`onDelete: Restrict`) while AuditLogs exist |
+| **Real Fastify & Postgres MCP Auth** | 5 | [`apps/api/test-integration/mcp-auth.integration.test.ts`](apps/api/test-integration/mcp-auth.integration.test.ts) | End-to-end tool execution, SHA-256 database lookup, tenant isolation, DB `lastUsedAt` update, 401 on unregistered/revoked/expired keys |
+| **Concurrent Claim Race** | 1 | [`apps/api/test-integration/concurrency.integration.test.ts`](apps/api/test-integration/concurrency.integration.test.ts) | 10 parallel `PrismaClient` worker connections racing atomic `updateMany` claiming 20 queued executions with 0 double-claims |
+| **Role Revocation & AuditLog Integrity** | 5 | [`apps/api/test-integration/rbac-revocation.integration.test.ts`](apps/api/test-integration/rbac-revocation.integration.test.ts) | Real Postgres: ADMIN→VIEWER demotion takes effect on next request; membership removal denies access; FK `RESTRICT` blocks org deletion with audit logs; immutability trigger blocks UPDATE/DELETE in real Postgres |
 
 ---
 
@@ -363,18 +366,22 @@ The test suite covers **138 total tests across 31 suites**, split into two disti
 - [x] **Stateless HMAC Sessions & Password Hashing (`scrypt`)**
 - [x] **Agent Execution Lifecycle Engine & State Machine**
 - [x] **Policy Governance: Approval Gates & Hierarchical Feature Flags**
-- [x] **Awaited Synchronous Audit Logging**
+- [x] **Awaited Synchronous Audit Logging (Immutable — `BEFORE UPDATE/DELETE` trigger + `onDelete: Restrict`)**
 - [x] **Deterministic Evaluation & Regression Delta Suite**
 - [x] **Model Context Protocol (MCP) Server Integration**
 - [x] **Next.js 15 Dashboard with Interactive Sandbox Controller**
 - [x] **Role-Based Access Control (RBAC) & Bearer Machine API Keys**
 - [x] **Async Background Execution Worker**
-- [ ] **Dedicated Audit Log UI Page**: Filterable table view for security & compliance officers (`/audit-logs`).
+- [x] **Audit Log UI (`/audit-logs`)** — Filterable table, actor type filter, JSON metadata drawer, immutability badge
+- [x] **API Key Management UI (`/api-keys`)** — Granular scope picker (wildcard scopes blocked per Human Governance Invariant), secret reveal on creation
+- [x] **Task Contract UI (`/task-contracts`)** — Contract cards, JSON spec inspector, creation modal
+- [x] **Eval Suite UI (`/evals`)** — Regression KPIs, tabbed test cases / runs, live run trigger
 - [ ] **Typed API Response Contracts**: Shared response types across frontend & backend via `@agentready/shared`.
 - [ ] **Real-time Webhook Notifications**: Push alerts for pending `ApprovalRequest` events to Slack, Teams, or custom webhooks.
 - [ ] **HTTP / SSE Transport for MCP Gateway**: Extend MCP server from stdio transport to distributed HTTP/SSE endpoints.
 - [ ] **Password Reset & Team Invite Workflows**: Email token-based credential recovery and team onboarding flows.
 - [ ] **Custom LLM Judge Scoring**: Integrate non-deterministic LLM-as-a-judge scoring for complex agent evaluation criteria.
+- [ ] **Audited Org Archival API**: Superuser/service-role endpoint that exports `AuditLog` records to external immutable storage prior to deletion and writes a dedicated, untamperable record of the archival event (required before tenant offboarding/org deletion can be safely permitted).
 
 ---
 

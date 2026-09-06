@@ -249,13 +249,25 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
     assert.ok(retainedAgentLog, "AuditLog must NOT be deleted when the actor Agent is deleted");
     assert.equal(retainedAgentLog.actorAgentId, null, "actorAgentId must be set to null on Agent deletion");
 
-    // 5. Delete the Organization: Tenant data purge cascades all tenant-scoped logs
-    await ctx.prisma.organization.delete({ where: { id: org.id } });
-    const purgedLogs = await ctx.prisma.auditLog.findMany({ where: { organizationId: org.id } });
-    assert.equal(purgedLogs.length, 0, "AuditLogs cascade-delete when the tenant organization is deleted");
+    // 5. Organization deletion is BLOCKED (onDelete: Restrict) while AuditLogs exist.
+    //    Policy decision (2026-09-06): AuditLogs are compliance evidence. An org with
+    //    existing audit logs cannot be deleted — the org owner must explicitly archive
+    //    logs via a superuser offboarding procedure before deletion is permitted.
+    await assert.rejects(
+      async () => { await ctx.prisma.organization.delete({ where: { id: org.id } }); },
+      (err: any) => {
+        const isRestrictErr =
+          err?.code === "P2003" ||
+          err?.code === "P2014" ||
+          (err?.message ?? "").includes("foreign key constraint") ||
+          (err?.message ?? "").includes("violates foreign key");
+        assert.ok(isRestrictErr, `Expected FK Restrict error, got: ${err?.code} — ${(err?.message ?? "").slice(0, 200)}`);
+        return true;
+      }
+    );
   });
 
-  it("enforces immutability on AuditLog: prevents direct UPDATE and DELETE, but allows Organization cascade", async () => {
+  it("enforces immutability on AuditLog: prevents direct UPDATE and DELETE; org deletion is blocked by Restrict", async () => {
     const org = await ctx.prisma.organization.create({
       data: { name: "Immutable Test Org", slug: `immutable-${Date.now()}` },
     });
@@ -295,10 +307,22 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
       }
     );
 
-    // 3. Organization cascade DELETE must succeed
-    await ctx.prisma.organization.delete({ where: { id: org.id } });
-    const remaining = await ctx.prisma.auditLog.findUnique({ where: { id: log.id } });
-    assert.equal(remaining, null);
+    // 3. Organization deletion must ALSO be blocked (onDelete: Restrict).
+    //    Both the immutability trigger AND the FK Restrict work together:
+    //    direct DELETEs hit the trigger; cascade DELETEs hit the FK Restrict.
+    //    Either way, audit evidence cannot be erased without a superuser archival step.
+    await assert.rejects(
+      async () => { await ctx.prisma.organization.delete({ where: { id: org.id } }); },
+      (err: any) => {
+        const isRestrictErr =
+          err?.code === "P2003" ||
+          err?.code === "P2014" ||
+          (err?.message ?? "").includes("foreign key constraint") ||
+          (err?.message ?? "").includes("violates foreign key");
+        assert.ok(isRestrictErr, `Expected FK Restrict error on org delete, got: ${err?.code} — ${(err?.message ?? "").slice(0, 200)}`);
+        return true;
+      }
+    );
   });
 });
 

@@ -4,6 +4,11 @@ import { useState } from "react";
 import type { ApiKeyItem, CreatedApiKeyResponse } from "../../lib/api";
 import { createApiKey, revokeApiKey } from "../../lib/api";
 
+// NOTE: The "all" / "admin" wildcard scopes are intentionally excluded from this list.
+// Per the Human Governance Invariant, API keys are scoped to agent-facing routes only.
+// Admin actions (feature flags, approval gate policy, API key management) require a
+// human session (Owner or Admin role) and cannot be performed by any API key,
+// regardless of scopes. Adding wildcard scopes in the UI would be misleading.
 const AVAILABLE_SCOPES = [
   { scope: "executions:read", label: "Executions (Read)", desc: "View execution history and runtime status" },
   { scope: "executions:write", label: "Executions (Write)", desc: "Dispatch and trigger new agent executions" },
@@ -16,8 +21,7 @@ const AVAILABLE_SCOPES = [
   { scope: "eval:read", label: "Evals (Read)", desc: "View evaluation benchmark cases and regression metrics" },
   { scope: "eval:write", label: "Evals (Write)", desc: "Trigger and score evaluation test suites" },
   { scope: "observability:read", label: "Observability (Read)", desc: "Access telemetry and dashboard analytics" },
-  { scope: "audit:read", label: "Audit (Read)", desc: "Inspect immutable audit log records" },
-  { scope: "all", label: "All Capabilities", desc: "Wildcard access to all agent and governance endpoints" }
+  { scope: "audit:read", label: "Audit (Read)", desc: "Inspect immutable audit log records" }
 ];
 
 function formatDate(d: string | null) {
@@ -435,6 +439,21 @@ export function ApiKeyManager({
 
                 {/* Scopes Section */}
                 <div style={{ marginBottom: "20px" }}>
+                  {/* Governance policy notice */}
+                  <div style={{
+                    background: "#fefce8",
+                    border: "1px solid #fde68a",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    marginBottom: "12px",
+                    fontSize: "0.78rem",
+                    color: "#92400e",
+                    lineHeight: 1.5
+                  }}>
+                    <strong>⚠ Human Governance Constraint:</strong> API keys are restricted to agent-facing routes.
+                    Admin actions — feature flags, approval gate policy, and key management — require a human
+                    session (Owner/Admin role) and will be rejected regardless of the scopes granted here.
+                  </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                     <label style={{ fontSize: "0.82rem", fontWeight: "700", color: "#334155" }}>
                       Granted Scopes ({selectedScopes.length} selected)

@@ -367,3 +367,171 @@ describe("Role-Based Access Control (RBAC) Integration Tests", () => {
     assert.equal(body.name, "Owner Eval Case");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Role Revocation Regression Tests
+// ---------------------------------------------------------------------------
+// These tests verify that role checks are evaluated against the LIVE database
+// state on every request. A session token is intentionally long-lived (valid
+// for 1 hour), but if the underlying membership role is downgraded AFTER the
+// token is issued, the very next request must be denied — not allowed because
+// the token was valid at login time.
+// ---------------------------------------------------------------------------
+describe("Role Revocation Regression Tests", () => {
+  let app: any;
+
+  beforeEach(async () => {
+    resetMockStore();
+    app = await buildServer();
+
+    // Seed organization
+    mockStore.organizations.push({
+      id: "org-revoke",
+      name: "Revoke Org",
+      slug: "revoke-org",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Seed user
+    mockStore.users.push({
+      id: "user-revoke",
+      email: "revoke@example.com",
+      name: "Revoke User",
+      passwordHash: "hash",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Seed agent for feature-flag tests
+    mockStore.agentIdentities.push({
+      id: "agent-revoke",
+      organizationId: "org-revoke",
+      name: "Revoke Agent",
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+  });
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it("rejects the next request after ADMIN role is demoted to VIEWER mid-session", async () => {
+    // Step 1: Seed the user as ADMIN
+    const membership = {
+      id: "mem-revoke",
+      userId: "user-revoke",
+      organizationId: "org-revoke",
+      role: "ADMIN" as const,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    mockStore.memberships.push(membership);
+
+    // Step 2: Issue a session token (valid for 1 hour — simulates a long-lived session)
+    const token = signSession(
+      { userId: "user-revoke", organizationId: "org-revoke", exp: Math.floor(Date.now() / 1000) + 3600 },
+      env.AUTH_SESSION_SECRET
+    );
+    const cookie = `agentready_session=${token}`;
+
+    // Step 3: Confirm the ADMIN can access a privileged endpoint before demotion
+    const beforeRes = await app.inject({
+      method: "PUT",
+      url: "/api/v1/feature-flags",
+      headers: { cookie },
+      payload: {
+        agentId: "agent-revoke",
+        capability: "file_write",
+        state: "DISABLED"
+      }
+    });
+    // Expect 200 (or any non-403) — the ADMIN is currently authorized
+    assert.notEqual(
+      beforeRes.statusCode,
+      403,
+      `Expected ADMIN to be allowed before demotion, got ${beforeRes.statusCode}: ${beforeRes.body}`
+    );
+
+    // Step 4: Demote the role to VIEWER in the mock store (simulates a DB update)
+    const idx = mockStore.memberships.findIndex((m) => m.id === "mem-revoke");
+    assert.ok(idx !== -1, "Membership should exist in mock store");
+    mockStore.memberships[idx] = { ...mockStore.memberships[idx], role: "VIEWER" };
+
+    // Step 5: Make the very next request with the SAME session token
+    // The token itself is still cryptographically valid — but role is now VIEWER.
+    const afterRes = await app.inject({
+      method: "PUT",
+      url: "/api/v1/feature-flags",
+      headers: { cookie },
+      payload: {
+        agentId: "agent-revoke",
+        capability: "file_write",
+        state: "DISABLED"
+      }
+    });
+
+    // The server must re-read the membership role on every request.
+    // A VIEWER does not have OWNER/ADMIN privilege on this endpoint → must be 403.
+    assert.equal(
+      afterRes.statusCode,
+      403,
+      `Expected 403 after role demotion, got ${afterRes.statusCode}: ${afterRes.body}`
+    );
+    const body = JSON.parse(afterRes.body);
+    assert.equal(body.error.code, "FORBIDDEN");
+  });
+
+  it("rejects the next request after membership is fully removed mid-session", async () => {
+    // Step 1: Seed the user as OWNER
+    mockStore.memberships.push({
+      id: "mem-removed",
+      userId: "user-revoke",
+      organizationId: "org-revoke",
+      role: "OWNER" as const,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const token = signSession(
+      { userId: "user-revoke", organizationId: "org-revoke", exp: Math.floor(Date.now() / 1000) + 3600 },
+      env.AUTH_SESSION_SECRET
+    );
+    const cookie = `agentready_session=${token}`;
+
+    // Step 2: Confirm they can access a privileged endpoint as OWNER
+    const beforeRes = await app.inject({
+      method: "PUT",
+      url: "/api/v1/feature-flags",
+      headers: { cookie },
+      payload: { agentId: "agent-revoke", capability: "file_write", state: "DISABLED" }
+    });
+    assert.notEqual(beforeRes.statusCode, 403, `Expected OWNER to be allowed, got ${beforeRes.statusCode}`);
+
+    // Step 3: Remove the membership entirely (e.g., user was kicked from the org)
+    mockStore.memberships = mockStore.memberships.filter((m) => m.id !== "mem-removed");
+
+    // Step 4: The same session token is now orphaned — membership lookup returns null
+    const afterRes = await app.inject({
+      method: "PUT",
+      url: "/api/v1/feature-flags",
+      headers: { cookie },
+      payload: { agentId: "agent-revoke", capability: "file_write", state: "DISABLED" }
+    });
+
+    // With no membership, the user is no longer a member of the org.
+    // The auth plugin returns 401 (UNAUTHORIZED) since it cannot establish an org context,
+    // which is equivalent to access denial. Both 401 and 403 are correct here.
+    assert.ok(
+      afterRes.statusCode === 401 || afterRes.statusCode === 403,
+      `Expected 401 or 403 after membership removal, got ${afterRes.statusCode}: ${afterRes.body}`
+    );
+    const body = JSON.parse(afterRes.body);
+    assert.ok(
+      body.error.code === "UNAUTHORIZED" || body.error.code === "FORBIDDEN",
+      `Expected UNAUTHORIZED or FORBIDDEN error code, got ${body.error.code}`
+    );
+  });
+});
+
