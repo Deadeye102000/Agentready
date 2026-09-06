@@ -1,4 +1,4 @@
-export { PrismaClient } from "./generated/prisma/client.js";
+export { Prisma, PrismaClient } from "./generated/prisma/client.js";
 export type {
   ActorType,
   AgentExecution,
@@ -21,7 +21,6 @@ export type {
   Organization,
   OrganizationMember,
   OrganizationRole,
-  Prisma,
   Project,
   ProjectStatus,
   Task,

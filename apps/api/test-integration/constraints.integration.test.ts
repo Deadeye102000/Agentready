@@ -62,60 +62,42 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
     );
   });
 
-  it("enforces composite unique constraint on IdempotencyKey [executionId, key]", async () => {
-    const org = await ctx.prisma.organization.create({
-      data: { name: "Idempotency Org", slug: `org-idemp-${Date.now()}` },
+  it("enforces composite unique constraint on IdempotencyKey [organizationId, key]", async () => {
+    const org1 = await ctx.prisma.organization.create({
+      data: { name: "Idempotency Org 1", slug: `org-idemp-1-${Date.now()}` },
     });
 
-    const agent = await ctx.prisma.agentIdentity.create({
-      data: { organizationId: org.id, name: "Idemp Agent" },
-    });
-
-    const exec1 = await ctx.prisma.agentExecution.create({
-      data: {
-        organizationId: org.id,
-        agentId: agent.id,
-        objective: "Execution 1",
-        input: {},
-        status: "RUNNING",
-      },
-    });
-
-    const exec2 = await ctx.prisma.agentExecution.create({
-      data: {
-        organizationId: org.id,
-        agentId: agent.id,
-        objective: "Execution 2",
-        input: {},
-        status: "RUNNING",
-      },
+    const org2 = await ctx.prisma.organization.create({
+      data: { name: "Idempotency Org 2", slug: `org-idemp-2-${Date.now()}` },
     });
 
     const sharedKey = `idemp-key-${Date.now()}`;
+    const expiresAt = new Date(Date.now() + 3600000);
 
-    // First key for exec1 succeeds
-    await ctx.prisma.idempotencyKey.create({
+    // First key for org1 succeeds
+    const key1 = await ctx.prisma.idempotencyKey.create({
       data: {
-        organizationId: org.id,
-        executionId: exec1.id,
+        organizationId: org1.id,
         key: sharedKey,
         requestHash: "hash-1",
         route: "/api/v1/tool-calls/check",
         actorType: "AGENT",
+        expiresAt,
       },
     });
+    assert.ok(key1.id);
 
-    // Duplicate key for the SAME execution (exec1) must fail with P2002
+    // Duplicate key for the SAME organization (org1) must fail with P2002
     await assert.rejects(
       async () => {
         await ctx.prisma.idempotencyKey.create({
           data: {
-            organizationId: org.id,
-            executionId: exec1.id,
+            organizationId: org1.id,
             key: sharedKey,
             requestHash: "hash-2",
             route: "/api/v1/tool-calls/check",
             actorType: "AGENT",
+            expiresAt,
           },
         });
       },
@@ -126,62 +108,61 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
       }
     );
 
-    // The SAME key for a DIFFERENT execution (exec2) must succeed (composite uniqueness)
-    const exec2Key = await ctx.prisma.idempotencyKey.create({
+    // The SAME key for a DIFFERENT organization (org2) must succeed (tenant-scoped composite uniqueness)
+    const org2Key = await ctx.prisma.idempotencyKey.create({
       data: {
-        organizationId: org.id,
-        executionId: exec2.id,
+        organizationId: org2.id,
         key: sharedKey,
         requestHash: "hash-3",
         route: "/api/v1/tool-calls/check",
         actorType: "AGENT",
+        expiresAt,
       },
     });
-    assert.ok(exec2Key.id);
+    assert.ok(org2Key.id);
   });
 
-  it("enforces composite unique constraint on ToolCallTrace [executionId, toolCallId]", async () => {
-    const org = await ctx.prisma.organization.create({
-      data: { name: "Trace Org", slug: `org-trace-${Date.now()}` },
+  it("enforces composite unique constraint on TaskContract [organizationId, name, version]", async () => {
+    const org1 = await ctx.prisma.organization.create({
+      data: { name: "Contract Org 1", slug: `org-contract-1-${Date.now()}` },
     });
 
-    const agent = await ctx.prisma.agentIdentity.create({
-      data: { organizationId: org.id, name: "Trace Agent" },
+    const org2 = await ctx.prisma.organization.create({
+      data: { name: "Contract Org 2", slug: `org-contract-2-${Date.now()}` },
     });
 
-    const exec = await ctx.prisma.agentExecution.create({
+    const project1 = await ctx.prisma.project.create({
+      data: { organizationId: org1.id, name: "Project 1" },
+    });
+
+    const project2 = await ctx.prisma.project.create({
+      data: { organizationId: org2.id, name: "Project 2" },
+    });
+
+    const contractName = "Compliance Contract";
+
+    // First contract on org1 with version 1 succeeds
+    const contract1 = await ctx.prisma.taskContract.create({
       data: {
-        organizationId: org.id,
-        agentId: agent.id,
-        objective: "Trace Execution",
-        input: {},
-        status: "RUNNING",
+        organizationId: org1.id,
+        projectId: project1.id,
+        name: contractName,
+        version: 1,
+        objective: "Validate compliance requirements",
       },
     });
+    assert.ok(contract1.id);
 
-    const toolCallId = "call_abc_123";
-
-    // First trace with this toolCallId succeeds
-    await ctx.prisma.toolCallTrace.create({
-      data: {
-        organizationId: org.id,
-        executionId: exec.id,
-        toolCallId,
-        toolName: "database_query",
-        status: "PENDING",
-      },
-    });
-
-    // Second trace with the identical toolCallId for the same execution fails with P2002
+    // Second contract on org1 with identical name and version must fail with P2002
     await assert.rejects(
       async () => {
-        await ctx.prisma.toolCallTrace.create({
+        await ctx.prisma.taskContract.create({
           data: {
-            organizationId: org.id,
-            executionId: exec.id,
-            toolCallId,
-            toolName: "database_query",
-            status: "PENDING",
+            organizationId: org1.id,
+            projectId: project1.id,
+            name: contractName,
+            version: 1,
+            objective: "Duplicate compliance contract",
           },
         });
       },
@@ -191,6 +172,30 @@ describe("Real PostgreSQL: Composite Unique Constraints & Foreign Key Cascades",
         return true;
       }
     );
+
+    // Same contract name with version 2 on org1 succeeds
+    const contract2 = await ctx.prisma.taskContract.create({
+      data: {
+        organizationId: org1.id,
+        projectId: project1.id,
+        name: contractName,
+        version: 2,
+        objective: "Validate compliance requirements v2",
+      },
+    });
+    assert.ok(contract2.id);
+
+    // Same contract name with version 1 on a DIFFERENT organization (org2) succeeds
+    const org2Contract = await ctx.prisma.taskContract.create({
+      data: {
+        organizationId: org2.id,
+        projectId: project2.id,
+        name: contractName,
+        version: 1,
+        objective: "Org 2 compliance contract",
+      },
+    });
+    assert.ok(org2Contract.id);
   });
 
   it("retains AuditLog records on User and Agent deletion (onDelete: SetNull), but cascades on Organization deletion", async () => {

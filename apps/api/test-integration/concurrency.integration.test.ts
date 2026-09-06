@@ -23,6 +23,10 @@ describe("Real PostgreSQL: Concurrent Execution Poller Atomic updateMany", () =>
       data: { organizationId: org.id, name: "Concurrency Agent" },
     });
 
+    const project = await ctx.prisma.project.create({
+      data: { organizationId: org.id, name: "Concurrency Project" },
+    });
+
     // 1. Seed 20 QUEUED executions in real PostgreSQL
     const TOTAL_EXECUTIONS = 20;
     const executionIds: string[] = [];
@@ -31,6 +35,7 @@ describe("Real PostgreSQL: Concurrent Execution Poller Atomic updateMany", () =>
       const exec = await ctx.prisma.agentExecution.create({
         data: {
           organizationId: org.id,
+          projectId: project.id,
           agentId: agent.id,
           objective: `Concurrent Test Objective ${i}`,
           input: { index: i },

@@ -60,24 +60,34 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
       },
     });
 
+    const project = await ctx.prisma.project.create({
+      data: { organizationId: org.id, name: "Tenant MCP Project" },
+    });
+
+    const foreignProject = await ctx.prisma.project.create({
+      data: { organizationId: foreignOrg.id, name: "Foreign MCP Project" },
+    });
+
     // 3. Seed TaskContracts: one in tenant org, one in foreign org
     await ctx.prisma.taskContract.create({
       data: {
         organizationId: org.id,
+        projectId: project.id,
         name: "Tenant Governance Contract",
         version: 1,
         allowedTools: ["tenant_query_db", "tenant_read_docs"],
-        description: "Contract belonging to the authenticated tenant",
+        objective: "Contract belonging to the authenticated tenant",
       },
     });
 
     await ctx.prisma.taskContract.create({
       data: {
         organizationId: foreignOrg.id,
+        projectId: foreignProject.id,
         name: "Foreign Secret Contract",
         version: 1,
         allowedTools: ["secret_tool"],
-        description: "Contract belonging to a completely different tenant",
+        objective: "Contract belonging to a completely different tenant",
       },
     });
 
@@ -104,14 +114,15 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
 
     assert.equal(result.isError, undefined);
     assert.ok(Array.isArray(result.content));
-    assert.equal(result.content[0].type, "text");
+    const contentList = result.content as Array<{ type: string; text: string }>;
+    assert.equal(contentList[0].type, "text");
 
-    const contracts = JSON.parse(result.content[0].text);
+    const contracts = JSON.parse(contentList[0].text);
     assert.ok(Array.isArray(contracts));
     assert.equal(contracts.length, 1);
     assert.equal(contracts[0].name, "Tenant Governance Contract");
     // Ensure foreign contract is never leaked across tenants
-    assert.ok(!result.content[0].text.includes("Foreign Secret Contract"));
+    assert.ok(!contentList[0].text.includes("Foreign Secret Contract"));
 
     // 6. Verify real PostgreSQL side effect: lastUsedAt timestamp was updated asynchronously
     // Wait briefly for background update to complete in Postgres
@@ -147,17 +158,23 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
       },
     });
 
+    const capProject = await ctx.prisma.project.create({
+      data: { organizationId: org.id, name: "Cap Project" },
+    });
+
     // Seed task contract, feature flag, and approval gate in real Postgres
     await ctx.prisma.taskContract.create({
       data: {
         organizationId: org.id,
+        projectId: capProject.id,
         name: "Dev Contract",
         version: 1,
+        objective: "Dev contract objective",
         allowedTools: ["code_editor"],
       },
     });
 
-    await ctx.prisma.featureFlag.create({
+    await ctx.prisma.agentFeatureFlag.create({
       data: {
         organizationId: org.id,
         capability: "ai_inference_v2",
@@ -193,7 +210,9 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
     });
 
     assert.equal(result.isError, undefined);
-    const parsed = JSON.parse(result.content[0].text);
+    assert.ok(Array.isArray(result.content));
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0].text);
     assert.ok(parsed.availableTools.includes("code_editor"));
     assert.ok(parsed.availableTools.includes("ai_inference_v2"));
     assert.ok(parsed.availableTools.includes("production_deploy"));
@@ -224,7 +243,9 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
     });
 
     assert.equal(result.isError, true);
-    assert.ok(result.content[0].text.includes("401"), "Expected 401 error in MCP response");
+    assert.ok(Array.isArray(result.content));
+    const content = result.content as Array<{ type: string; text: string }>;
+    assert.ok(content[0].text.includes("401"), "Expected 401 error in MCP response");
 
     await client.close();
   });
@@ -273,7 +294,9 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
     });
 
     assert.equal(result.isError, true);
-    assert.ok(result.content[0].text.includes("401"), "Revoked key must receive 401 Unauthorized");
+    assert.ok(Array.isArray(result.content));
+    const content = result.content as Array<{ type: string; text: string }>;
+    assert.ok(content[0].text.includes("401"), "Revoked key must receive 401 Unauthorized");
 
     await client.close();
   });
@@ -322,7 +345,9 @@ describe("Real PostgreSQL & Fastify: MCP Server Real Auth Flow End-to-End", () =
     });
 
     assert.equal(result.isError, true);
-    assert.ok(result.content[0].text.includes("401"), "Expired key must receive 401 Unauthorized");
+    assert.ok(Array.isArray(result.content));
+    const content = result.content as Array<{ type: string; text: string }>;
+    assert.ok(content[0].text.includes("401"), "Expired key must receive 401 Unauthorized");
 
     await client.close();
   });
