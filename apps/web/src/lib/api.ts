@@ -66,7 +66,7 @@ export type RegressionData = {
 };
 
 export type ApiResult<T> = {
-  data: T;
+  data: T | null;
   error: string | null;
   isFallback: boolean;
 };
@@ -246,9 +246,9 @@ export async function fetchDashboardData(): Promise<ApiResult<DashboardData>> {
 
     if (!res.ok) {
       return {
-        data: fallbackDashboard,
+        data: null,
         error: `API returned HTTP ${res.status}: ${res.statusText}`,
-        isFallback: true,
+        isFallback: false,
       };
     }
 
@@ -256,9 +256,9 @@ export async function fetchDashboardData(): Promise<ApiResult<DashboardData>> {
     return { data, error: null, isFallback: false };
   } catch (err: any) {
     return {
-      data: fallbackDashboard,
+      data: null,
       error: err?.message || "Failed to connect to AgentReady API server",
-      isFallback: true,
+      isFallback: false,
     };
   }
 }
@@ -273,9 +273,9 @@ export async function fetchRegressionData(): Promise<ApiResult<RegressionData>> 
 
     if (!res.ok) {
       return {
-        data: fallbackRegression,
+        data: null,
         error: `API returned HTTP ${res.status}: ${res.statusText}`,
-        isFallback: true,
+        isFallback: false,
       };
     }
 
@@ -283,9 +283,9 @@ export async function fetchRegressionData(): Promise<ApiResult<RegressionData>> 
     return { data, error: null, isFallback: false };
   } catch (err: any) {
     return {
-      data: fallbackRegression,
+      data: null,
       error: err?.message || "Failed to connect to AgentReady API server",
-      isFallback: true,
+      isFallback: false,
     };
   }
 }
@@ -403,9 +403,9 @@ export async function fetchExecutionDetail(id: string): Promise<ApiResult<Execut
 
     if (!res.ok) {
       return {
-        data: fallbackExecutionDetail,
+        data: null,
         error: `API returned HTTP ${res.status}: ${res.statusText}`,
-        isFallback: true,
+        isFallback: false,
       };
     }
 
@@ -413,9 +413,68 @@ export async function fetchExecutionDetail(id: string): Promise<ApiResult<Execut
     return { data, error: null, isFallback: false };
   } catch (err: any) {
     return {
-      data: fallbackExecutionDetail,
+      data: null,
       error: err?.message || "Failed to connect to AgentReady API server",
-      isFallback: true,
+      isFallback: false,
+    };
+  }
+}
+
+export type ToolCallTraceItem = {
+  id: string;
+  toolName: string;
+  status: string;
+  input: any;
+  output: any;
+  error: string | null;
+  latencyMs: number | null;
+  startedAt?: string;
+  createdAt?: string;
+  completedAt: string | null;
+  agent?: { id: string; name: string };
+};
+
+export type PaginatedTracesResponse = {
+  data: ToolCallTraceItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+export async function fetchToolCallTraces(
+  executionId?: string,
+  page = 1,
+  limit = 50
+): Promise<ApiResult<PaginatedTracesResponse>> {
+  const apiBaseUrl = getApiBaseUrl();
+  const query = new URLSearchParams();
+  if (executionId) query.set("executionId", executionId);
+  query.set("page", String(page));
+  query.set("limit", String(limit));
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/v1/tool-call-traces?${query.toString()}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+
+    const data = (await res.json()) as PaginatedTracesResponse;
+    return { data, error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
     };
   }
 }

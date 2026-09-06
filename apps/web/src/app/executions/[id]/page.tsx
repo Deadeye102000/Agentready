@@ -1,21 +1,11 @@
 import Link from "next/link";
 import { Navbar } from "../../../components/Navbar";
-import { fetchExecutionDetail, formatPercent, statusClass } from "../../../lib/api";
-
-function ErrorAlert({ message, isFallback }: { message: string; isFallback: boolean }) {
-  if (!isFallback || !message) return null;
-  return (
-    <div className="errorBanner" role="alert">
-      <div className="errorContent">
-        <div className="errorIcon">!</div>
-        <div className="errorText">
-          <strong>API Connection Alert</strong>
-          <span>{message} — Showing cached fallback representation.</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+import {
+  fetchExecutionDetail,
+  fetchToolCallTraces,
+  formatPercent,
+  statusClass
+} from "../../../lib/api";
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "n/a";
@@ -53,12 +43,65 @@ function safeJsonSummary(val: any) {
 
 export default async function ExecutionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
-  const executionRes = await fetchExecutionDetail(resolvedParams.id);
+  const [executionRes, tracesRes] = await Promise.all([
+    fetchExecutionDetail(resolvedParams.id),
+    fetchToolCallTraces(resolvedParams.id)
+  ]);
+
   const execution = executionRes.data;
+
+  // Explicit error state if the execution failed to load or backend is disconnected — never silent fallback
+  if (executionRes.error || !execution) {
+    return (
+      <>
+        <Navbar orgName="Execution Context" />
+        <main className="shell">
+          <div style={{ marginBottom: "16px" }}>
+            <Link href="/" className="retryBtn" style={{ textDecoration: "none", display: "inline-block" }}>
+              ← Back to Dashboard
+            </Link>
+          </div>
+
+          <div
+            className="panel wide"
+            style={{ borderLeft: "5px solid #ef4444", padding: "32px", marginTop: "16px" }}
+            role="alert"
+          >
+            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+              <div style={{ fontSize: "2rem", lineHeight: 1 }}>⚠️</div>
+              <div style={{ flex: 1 }}>
+                <span className="pill bad" style={{ marginBottom: "8px", display: "inline-block" }}>
+                  Execution Load Error
+                </span>
+                <h1 style={{ fontSize: "1.5rem", fontWeight: "700", margin: "8px 0" }}>
+                  Unable to load execution details
+                </h1>
+                <p style={{ color: "#475569", margin: "8px 0 16px 0", fontSize: "0.95rem", lineHeight: 1.5 }}>
+                  {executionRes.error || `Execution with ID "${resolvedParams.id}" was not found or could not be reached.`}
+                </p>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <Link href={`/executions/${resolvedParams.id}`} className="retryBtn" style={{ textDecoration: "none" }}>
+                    ↻ Retry Loading
+                  </Link>
+                  <Link href="/" style={{ fontSize: "0.85rem", color: "#3b82f6", textDecoration: "underline" }}>
+                    Return to Overview
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   const isFailed = execution.status === "FAILED";
   const isSucceeded = execution.status === "SUCCEEDED";
   const isAwaitingApproval = execution.status === "WAITING_FOR_APPROVAL";
+
+  // Real tool call traces fetched directly from GET /api/v1/tool-call-traces
+  const traces = tracesRes.data?.data ?? execution.toolCallTraces ?? [];
+  const pagination = tracesRes.data?.pagination;
 
   return (
     <>
@@ -70,8 +113,6 @@ export default async function ExecutionDetailPage({ params }: { params: Promise<
           </Link>
         </div>
 
-        <ErrorAlert message={executionRes.error || ""} isFallback={executionRes.isFallback} />
-
         {/* Execution Summary Header Banner */}
         <div 
           className="panel wide" 
@@ -80,7 +121,7 @@ export default async function ExecutionDetailPage({ params }: { params: Promise<
             borderLeft: `5px solid ${isFailed ? "#ef4444" : isSucceeded ? "#10b981" : isAwaitingApproval ? "#eab308" : "#64748b"}` 
           }}
         >
-          <div style={{ display: "flex", justifyContent: "between", alignItems: "start", flexWrap: "wrap", gap: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
             <div style={{ flex: "1" }}>
               <span className="brandBadge">Execution Detail</span>
               <h1 style={{ fontSize: "1.75rem", fontWeight: "800", marginTop: "4px" }}>
@@ -154,14 +195,31 @@ export default async function ExecutionDetailPage({ params }: { params: Promise<
         {/* Trace Timeline Workspace */}
         <section className="workspace">
           <div className="panel wide">
-            <div className="panelHeader">
-              <h2>Trace Timeline</h2>
-              <span>{execution.toolCallTraces.length} recorded events</span>
+            <div className="panelHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2>Trace Timeline</h2>
+                <span className="muted">
+                  {pagination ? `${pagination.total} total traces (page ${pagination.page} of ${pagination.totalPages || 1})` : `${traces.length} recorded events`}
+                </span>
+              </div>
+              <span className="pill good">GET /api/v1/tool-call-traces</span>
             </div>
 
-            {execution.toolCallTraces.length > 0 ? (
+            {tracesRes.error && (
+              <div className="errorBanner" role="alert" style={{ marginTop: "1rem" }}>
+                <div className="errorContent">
+                  <div className="errorIcon">!</div>
+                  <div className="errorText">
+                    <strong>Traces Fetch Alert</strong>
+                    <span>{tracesRes.error}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {traces.length > 0 ? (
               <div className="stack" style={{ marginTop: "1rem" }}>
-                {execution.toolCallTraces.map((trace, index) => {
+                {traces.map((trace, index) => {
                   const isBlocked = trace.status === "BLOCKED";
                   const isTraceFailed = trace.status === "FAILED" || trace.error !== null;
                   const isTraceApprovalRequested = isBlocked && trace.error === "approval_requested";
@@ -184,7 +242,7 @@ export default async function ExecutionDetailPage({ params }: { params: Promise<
                         ...highlightStyle
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "8px" }}>
                         <div>
                           <span className="muted" style={{ marginRight: "8px", fontWeight: "bold" }}>
                             #{index + 1}

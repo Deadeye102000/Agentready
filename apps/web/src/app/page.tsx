@@ -40,7 +40,78 @@ export default async function HomePage() {
   ]);
 
   const dashboard = dashboardRes.data;
-  const regression = regressionRes.data;
+
+  // Explicit error state if the backend is disconnected or returns an error — never silent mock fallback
+  if (dashboardRes.error || !dashboard) {
+    return (
+      <>
+        <Navbar orgName="AgentReady Control Plane" />
+        <main className="shell">
+          <div
+            className="panel wide"
+            style={{ borderLeft: "5px solid #ef4444", padding: "32px", marginTop: "24px" }}
+            role="alert"
+          >
+            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+              <div style={{ fontSize: "2rem", lineHeight: 1 }}>⚠️</div>
+              <div style={{ flex: 1 }}>
+                <span className="pill bad" style={{ marginBottom: "8px", display: "inline-block" }}>
+                  Backend Disconnected
+                </span>
+                <h1 style={{ fontSize: "1.5rem", fontWeight: "700", margin: "8px 0" }}>
+                  Unable to connect to AgentReady API Server
+                </h1>
+                <p style={{ color: "#475569", margin: "8px 0 16px 0", fontSize: "0.95rem", lineHeight: 1.5 }}>
+                  {dashboardRes.error ||
+                    "The control plane API server is unreachable. Live monitoring data, telemetry, and contract metrics cannot be displayed."}
+                </p>
+                <div
+                  style={{
+                    background: "rgba(0, 0, 0, 0.04)",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    fontFamily: "monospace",
+                    fontSize: "0.85rem",
+                    marginBottom: "20px"
+                  }}
+                >
+                  Target Endpoint:{" "}
+                  <strong>
+                    {process.env.AGENTREADY_API_URL ||
+                      process.env.NEXT_PUBLIC_AGENTREADY_API_URL ||
+                      "http://localhost:3001"}
+                  </strong>
+                </div>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <Link href="/" className="retryBtn" style={{ textDecoration: "none" }}>
+                    ↻ Retry Connection
+                  </Link>
+                  <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    Ensure the Fastify API process is running on port 3001.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <SandboxController />
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  const regression = regressionRes.data || {
+    previousScore: null,
+    currentScore: null,
+    delta: null,
+    previousPassRate: null,
+    currentPassRate: null,
+    passRateChange: null,
+    newlyFailing: [],
+    newlyPassing: []
+  };
 
   // Metric Computations for 7 Overview KPI Cards
   const totalExecutions = dashboard.metrics.executions;
