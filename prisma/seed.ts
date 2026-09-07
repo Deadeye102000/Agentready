@@ -9,6 +9,7 @@ const demoApiKeyHash = createHash("sha256").update(demoRawApiKey).digest("hex");
 
 async function main() {
   const demoPasswordHash = await hashPassword("agentready-demo-password");
+  const devPasswordHash = await hashPassword("Password123!");
 
   const user = await prisma.user.upsert({
     where: { email: "demo@agentready.local" },
@@ -23,6 +24,19 @@ async function main() {
     }
   });
 
+  const devUser = await prisma.user.upsert({
+    where: { email: "demo@agentready.dev" },
+    update: {
+      name: "Demo Developer",
+      passwordHash: devPasswordHash
+    },
+    create: {
+      email: "demo@agentready.dev",
+      name: "Demo Developer",
+      passwordHash: devPasswordHash
+    }
+  });
+
   const organization = await prisma.organization.upsert({
     where: { slug: "demo-org" },
     update: {
@@ -32,11 +46,34 @@ async function main() {
       name: "Demo Organization",
       slug: "demo-org",
       members: {
-        create: {
-          userId: user.id,
-          role: "OWNER"
-        }
+        create: [
+          {
+            userId: user.id,
+            role: "OWNER"
+          },
+          {
+            userId: devUser.id,
+            role: "OWNER"
+          }
+        ]
       }
+    }
+  });
+
+  await prisma.organizationMember.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: organization.id,
+        userId: devUser.id
+      }
+    },
+    update: {
+      role: "OWNER"
+    },
+    create: {
+      organizationId: organization.id,
+      userId: devUser.id,
+      role: "OWNER"
     }
   });
 

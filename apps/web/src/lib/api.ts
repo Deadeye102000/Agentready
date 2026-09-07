@@ -441,6 +441,49 @@ export async function fetchExecutionDetail(
   }
 }
 
+export async function fetchExecutions(
+  cookieHeader?: string,
+  params?: { status?: string; agentId?: string; limit?: number; offset?: number }
+): Promise<ApiResult<any[]>> {
+  const apiBaseUrl = getApiBaseUrl();
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.agentId) query.set("agentId", params.agentId);
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset) query.set("offset", String(params.offset));
+
+  try {
+    const headers: Record<string, string> = {};
+    if (cookieHeader) {
+      headers["Cookie"] = cookieHeader;
+    }
+
+    const queryString = query.toString();
+    const url = `${apiBaseUrl}/api/v1/executions${queryString ? `?${queryString}` : ""}`;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers,
+    });
+
+    if (!res.ok) {
+      return {
+        data: null,
+        error: `API returned HTTP ${res.status}: ${res.statusText}`,
+        isFallback: false,
+      };
+    }
+
+    const data = await res.json();
+    return { data: Array.isArray(data) ? data : [], error: null, isFallback: false };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message || "Failed to connect to AgentReady API server",
+      isFallback: false,
+    };
+  }
+}
+
 export type ToolCallTraceItem = {
   id: string;
   toolName: string;
