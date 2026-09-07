@@ -311,7 +311,7 @@ export default function ApprovalQueuePage() {
     setLoading(true);
     setApiError(null);
 
-    const base = process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
+    const base = typeof window !== "undefined" ? "" : (process.env.AGENTREADY_API_URL || process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001");
     const url = showAll
       ? `${base}/api/v1/approval-requests`
       : `${base}/api/v1/approval-requests?status=PENDING`;
@@ -319,7 +319,7 @@ export default function ApprovalQueuePage() {
     try {
       const res = await fetch(url, {
         cache: "no-store",
-        credentials: "include",
+        credentials: "same-origin",
       });
       if (!res.ok) {
         setRequests([]);

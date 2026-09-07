@@ -562,9 +562,12 @@ export const fallbackApprovalRequests: ApprovalRequest[] = [
     reviewedByUser: null
   }
 ];
-
-const getClientApiBaseUrl = () =>
-  process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
+const getClientApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    return "";
+  }
+  return process.env.AGENTREADY_API_URL || process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
+};
 
 export async function fetchApprovalRequests(
   status?: string,

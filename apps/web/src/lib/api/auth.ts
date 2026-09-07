@@ -1,5 +1,9 @@
-const getClientApiBaseUrl = () =>
-  process.env.NEXT_PUBLIC_AGENTREADY_API_URL || "http://localhost:3001";
+const getAuthApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    return "";
+  }
+  return process.env.AGENTREADY_API_URL || "http://localhost:3000";
+};
 
 async function handleResponse(res: Response) {
   if (!res.ok) {
@@ -18,32 +22,41 @@ async function handleResponse(res: Response) {
 }
 
 export async function login(email: string, password: string) {
-  const base = getClientApiBaseUrl();
-  const res = await fetch(`${base}/api/v1/auth/login`, {
+  const base = getAuthApiBaseUrl();
+  const res = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
-    credentials: "include",
+    credentials: "same-origin",
   });
   return handleResponse(res);
 }
 
 export async function register(email: string, password: string, organizationName: string) {
-  const base = getClientApiBaseUrl();
-  const res = await fetch(`${base}/api/v1/auth/register`, {
+  const base = getAuthApiBaseUrl();
+  const res = await fetch(`${base}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, organizationName }),
-    credentials: "include",
+    credentials: "same-origin",
+  });
+  return handleResponse(res);
+}
+
+export async function logout() {
+  const base = getAuthApiBaseUrl();
+  const res = await fetch(`${base}/api/auth/logout`, {
+    method: "POST",
+    credentials: "same-origin",
   });
   return handleResponse(res);
 }
 
 export async function getMe() {
-  const base = getClientApiBaseUrl();
-  const res = await fetch(`${base}/api/v1/auth/me`, {
+  const base = getAuthApiBaseUrl();
+  const res = await fetch(`${base}/api/auth/me`, {
     method: "GET",
-    credentials: "include",
+    credentials: "same-origin",
   });
   return handleResponse(res);
 }
