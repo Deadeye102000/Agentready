@@ -3,7 +3,28 @@ import { fetchFromBackend } from "../client";
 
 export async function handleEvalScenario(request: Request) {
   try {
-    // 1. Log a real eval run record in Fastify
+    // 1. Look up existing contract and execution in the caller's organization
+    let contractId: string | undefined;
+    try {
+      const contracts = await fetchFromBackend("/api/v1/task-contracts", { method: "GET" }, request, "session");
+      if (Array.isArray(contracts) && contracts.length > 0) {
+        contractId = contracts[0].id;
+      }
+    } catch {
+      // continue without contractId if unresolvable
+    }
+
+    let executionId: string | undefined;
+    try {
+      const executions = await fetchFromBackend("/api/v1/executions", { method: "GET" }, request, "session");
+      if (Array.isArray(executions) && executions.length > 0) {
+        executionId = executions[0].id;
+      }
+    } catch {
+      // continue without executionId if unresolvable
+    }
+
+    // 2. Log a real eval run record in Fastify
     const result = await fetchFromBackend(
       "/api/v1/eval-runs",
       {
@@ -11,8 +32,8 @@ export async function handleEvalScenario(request: Request) {
         body: JSON.stringify({
           projectId: "demo-project",
           agentId: "demo-agent-identity",
-          contractId: "demo-contract-id",
-          executionId: "demo-agent-execution",
+          contractId,
+          executionId,
           name: "Sales Agent v2.0 CI/CD Verification",
           status: "PASSED",
           score: 0.98,

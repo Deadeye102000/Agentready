@@ -10,19 +10,36 @@ export class GovernanceRepository {
     });
   }
 
-  upsertApprovalGate(input: Prisma.ApprovalGateUncheckedCreateInput & { organizationId: string }) {
+  upsertApprovalGate(input: {
+    organizationId: string;
+    capability: string;
+    mode: any;
+    reason?: string | null;
+    riskLevel?: number;
+    enabled?: boolean;
+  }) {
+    const { organizationId, capability, mode, reason, riskLevel, enabled } = input;
     return this.prisma.approvalGate.upsert({
       where: {
         organizationId_capability: {
-          organizationId: input.organizationId,
-          capability: input.capability
+          organizationId,
+          capability
         }
       },
       update: {
-        mode: input.mode,
-        reason: input.reason
+        mode,
+        reason,
+        riskLevel: riskLevel !== undefined ? riskLevel : undefined,
+        enabled: enabled !== undefined ? enabled : undefined
       },
-      create: input
+      create: {
+        organizationId,
+        capability,
+        mode,
+        reason,
+        riskLevel: riskLevel ?? 0,
+        enabled: enabled ?? true
+      }
     });
   }
 

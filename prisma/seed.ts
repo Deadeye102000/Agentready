@@ -83,7 +83,20 @@ async function main() {
       agentId: agent.id,
       name: "Demo Agent Dev Key",
       keyPrefix: demoRawApiKey.slice(0, 16),
-      scopes: ["projects:read", "tasks:read", "documents:read"]
+      scopes: [
+        "executions:read",
+        "executions:write",
+        "eval:read",
+        "eval:write",
+        "contracts:read",
+        "governance:read",
+        "traces:read",
+        "traces:write",
+        "tool_calls:check",
+        "tool_calls:result",
+        "observability:read",
+        "audit:read"
+      ]
     },
     create: {
       organizationId: organization.id,
@@ -91,7 +104,20 @@ async function main() {
       name: "Demo Agent Dev Key",
       keyPrefix: demoRawApiKey.slice(0, 16),
       keyHash: demoApiKeyHash,
-      scopes: ["projects:read", "tasks:read", "documents:read"]
+      scopes: [
+        "executions:read",
+        "executions:write",
+        "eval:read",
+        "eval:write",
+        "contracts:read",
+        "governance:read",
+        "traces:read",
+        "traces:write",
+        "tool_calls:check",
+        "tool_calls:result",
+        "observability:read",
+        "audit:read"
+      ]
     }
   });
 
