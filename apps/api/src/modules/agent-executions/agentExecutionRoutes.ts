@@ -63,6 +63,12 @@ export async function registerAgentExecutionRoutes(app: FastifyInstance) {
   });
 
   app.post("/executions", {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: "1 minute"
+      }
+    },
     preHandler: [requireScope("executions:write")]
   }, async (request, reply) => {
     const context = requireOrgContext(request);

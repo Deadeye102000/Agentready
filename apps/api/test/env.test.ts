@@ -8,50 +8,53 @@ import { parseEnv, DEV_DEFAULT_AUTH_SESSION_SECRET } from "../src/lib/env.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe("Environment & Production Secret Protection", () => {
-  it("fails validation when NODE_ENV=production and AUTH_SESSION_SECRET is unset", () => {
+  it("fails validation when AUTH_SESSION_SECRET is unset and ALLOW_INSECURE_DEV_SECRETS is not true", () => {
     assert.throws(
       () => {
         parseEnv({
-          NODE_ENV: "production"
+          NODE_ENV: "development",
+          ALLOW_INSECURE_DEV_SECRETS: "false"
         });
       },
       (err: any) => {
         assert.match(
           err.message,
-          /AUTH_SESSION_SECRET is required in production and must not use the development default/
+          /AUTH_SESSION_SECRET is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured/
         );
         return true;
       }
     );
   });
 
-  it("fails validation when NODE_ENV=production and AUTH_SESSION_SECRET uses development default", () => {
+  it("fails validation when AUTH_SESSION_SECRET uses development default and ALLOW_INSECURE_DEV_SECRETS is not true", () => {
     assert.throws(
       () => {
         parseEnv({
-          NODE_ENV: "production",
-          AUTH_SESSION_SECRET: DEV_DEFAULT_AUTH_SESSION_SECRET
+          NODE_ENV: "development",
+          AUTH_SESSION_SECRET: DEV_DEFAULT_AUTH_SESSION_SECRET,
+          ALLOW_INSECURE_DEV_SECRETS: "false"
         });
       },
       (err: any) => {
         assert.match(
           err.message,
-          /AUTH_SESSION_SECRET is required in production and must not use the development default/
+          /AUTH_SESSION_SECRET is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured/
         );
         return true;
       }
     );
   });
 
-  it("allows development-only fallback secret when NODE_ENV=development", () => {
+  it("allows development-only fallback secret when ALLOW_INSECURE_DEV_SECRETS=true", () => {
     const devEnv = parseEnv({
-      NODE_ENV: "development"
+      NODE_ENV: "development",
+      ALLOW_INSECURE_DEV_SECRETS: "true"
     });
     assert.equal(devEnv.AUTH_SESSION_SECRET, DEV_DEFAULT_AUTH_SESSION_SECRET);
     assert.equal(devEnv.NODE_ENV, "development");
   });
 
-  it("allows production startup when a strong custom secret is provided", () => {
+  it("allows production startup when a strong custom secret is provided without ALLOW_INSECURE_DEV_SECRETS", () => {
     const prodSecret = "super-secure-production-secret-at-least-32-chars-long";
     const prodEnv = parseEnv({
       NODE_ENV: "production",
@@ -61,7 +64,7 @@ describe("Environment & Production Secret Protection", () => {
     assert.equal(prodEnv.NODE_ENV, "production");
   });
 
-  it("confirms API server startup process exits with failure when NODE_ENV=production and secret is unset", () => {
+  it("confirms API server startup process exits with failure when secret is default and ALLOW_INSECURE_DEV_SECRETS is not set", () => {
     const entrypoint = resolve(__dirname, "../src/index.ts");
     const result = spawnSync(
       process.execPath,
@@ -70,7 +73,8 @@ describe("Environment & Production Secret Protection", () => {
         env: {
           ...process.env,
           NODE_ENV: "production",
-          AUTH_SESSION_SECRET: ""
+          AUTH_SESSION_SECRET: DEV_DEFAULT_AUTH_SESSION_SECRET,
+          ALLOW_INSECURE_DEV_SECRETS: "false"
         },
         encoding: "utf-8",
         timeout: 5000
@@ -81,7 +85,7 @@ describe("Environment & Production Secret Protection", () => {
     const combinedOutput = (result.stdout || "") + (result.stderr || "");
     assert.match(
       combinedOutput,
-      /AUTH_SESSION_SECRET is required in production and must not use the development default/
+      /AUTH_SESSION_SECRET is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured/
     );
   });
 });

@@ -48,6 +48,10 @@ export const envSchema = z
       .default("postgresql://agentready:agentready@localhost:5432/agentready?schema=public"),
     DIRECT_URL: z.string().optional(),
     AUTH_SESSION_SECRET: z.string().min(32).optional(),
+    ALLOW_INSECURE_DEV_SECRETS: z
+      .string()
+      .optional()
+      .transform((val) => val === "true"),
     SENTRY_DSN: z.string().url().optional(),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
     AGENT_RUNNER_WEBHOOK_URL: z
@@ -68,14 +72,16 @@ export const envSchema = z
       )
   })
   .superRefine((data, ctx) => {
-    if (data.NODE_ENV === "production") {
-      if (!data.AUTH_SESSION_SECRET || data.AUTH_SESSION_SECRET === DEV_DEFAULT_AUTH_SESSION_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["AUTH_SESSION_SECRET"],
-          message: "AUTH_SESSION_SECRET is required in production and must not use the development default"
-        });
-      }
+    const isSecretMissingOrDefault =
+      !data.AUTH_SESSION_SECRET || data.AUTH_SESSION_SECRET === DEV_DEFAULT_AUTH_SESSION_SECRET;
+
+    if (isSecretMissingOrDefault && !data.ALLOW_INSECURE_DEV_SECRETS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_SESSION_SECRET"],
+        message:
+          "AUTH_SESSION_SECRET is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured"
+      });
     }
   })
   .transform((data) => ({

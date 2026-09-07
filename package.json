@@ -20,11 +20,13 @@
     "db:validate": "prisma validate --schema prisma/schema.prisma",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:push": "prisma db push --schema prisma/schema.prisma",
     "db:reset": "prisma db push --schema prisma/schema.prisma --force-reset",
     "db:studio": "prisma studio --schema prisma/schema.prisma",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:health": "tsx --env-file=.env packages/db/scripts/check-db.ts",
+    "generate:sandbox-key": "tsx --env-file=.env scripts/generate-sandbox-key.ts",
     "postinstall": "pnpm db:generate"
   },
   "devDependencies": {

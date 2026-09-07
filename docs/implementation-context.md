@@ -182,7 +182,7 @@ graph TD
 | Governance | GET | `/api/v1/feature-flags` | List feature flags (Session / Agent: governance:read) |
 | Governance | PUT | `/api/v1/feature-flags` | Upsert feature flag (Session: OWNER/ADMIN only, API keys not permitted) |
 | Governance | POST | `/api/v1/feature-flags/toggle` | Toggle feature flag state (Session: OWNER/ADMIN only, API keys not permitted) |
-| Governance | GET | `/api/v1/approval-requests` | List approval requests (Session) |
+| Governance | GET | `/api/v1/approval-requests` | List approval requests (Session / Agent: governance:read) |
 | Governance | POST | `/api/v1/approval-requests/:id/review` | Approve or reject request (Session: OWNER/ADMIN/APPROVER only, API keys not permitted) |
 | Governance | GET | `/api/v1/mcp-servers` | List MCP server registrations (Session / Agent: governance:read) |
 | Evals | POST | `/api/v1/eval-runs` | Create eval run (Session: Member+ / Agent: eval:write) |

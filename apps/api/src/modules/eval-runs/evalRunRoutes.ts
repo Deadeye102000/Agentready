@@ -107,6 +107,12 @@ export async function registerEvalRunRoutes(app: FastifyInstance) {
   });
 
   app.post("/eval-suites/run", {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: "1 minute"
+      }
+    },
     preHandler: [requireScope("eval:write")]
   }, async (request, reply) => {
     const context = requireOrgContext(request);

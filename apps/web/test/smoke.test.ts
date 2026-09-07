@@ -300,8 +300,8 @@ describe("Sandbox Route Production Secret Protection", () => {
     process.env = { ...originalEnv };
   });
 
-  it("throws error when NODE_ENV=production and SANDBOX_AGENT_API_KEY is unset", () => {
-    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+  it("throws error when ALLOW_INSECURE_DEV_SECRETS is not true and SANDBOX_AGENT_API_KEY is unset", () => {
+    delete process.env.ALLOW_INSECURE_DEV_SECRETS;
     delete process.env.SANDBOX_AGENT_API_KEY;
 
     assert.throws(
@@ -309,15 +309,15 @@ describe("Sandbox Route Production Secret Protection", () => {
       (err: any) => {
         assert.match(
           err.message,
-          /SANDBOX_AGENT_API_KEY is required in production and must not use the development default/
+          /SANDBOX_AGENT_API_KEY is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured/
         );
         return true;
       }
     );
   });
 
-  it("throws error when NODE_ENV=production and SANDBOX_AGENT_API_KEY is the development default", () => {
-    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+  it("throws error when ALLOW_INSECURE_DEV_SECRETS is not true and SANDBOX_AGENT_API_KEY is the development default", () => {
+    delete process.env.ALLOW_INSECURE_DEV_SECRETS;
     process.env.SANDBOX_AGENT_API_KEY = DEV_DEFAULT_SANDBOX_AGENT_API_KEY;
 
     assert.throws(
@@ -325,22 +325,22 @@ describe("Sandbox Route Production Secret Protection", () => {
       (err: any) => {
         assert.match(
           err.message,
-          /SANDBOX_AGENT_API_KEY is required in production and must not use the development default/
+          /SANDBOX_AGENT_API_KEY is required and must not use the development default unless ALLOW_INSECURE_DEV_SECRETS=true is explicitly configured/
         );
         return true;
       }
     );
   });
 
-  it("returns development default key when NODE_ENV=development and key is unset", () => {
-    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
+  it("returns development default key when ALLOW_INSECURE_DEV_SECRETS=true and key is unset", () => {
+    process.env.ALLOW_INSECURE_DEV_SECRETS = "true";
     delete process.env.SANDBOX_AGENT_API_KEY;
 
     assert.equal(getApiKey(), DEV_DEFAULT_SANDBOX_AGENT_API_KEY);
   });
 
-  it("returns configured key in production when valid secret is provided", () => {
-    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+  it("returns configured key in production when valid secret is provided without ALLOW_INSECURE_DEV_SECRETS", () => {
+    delete process.env.ALLOW_INSECURE_DEV_SECRETS;
     process.env.SANDBOX_AGENT_API_KEY = "ar_live_custom_prod_secret_token";
 
     assert.equal(getApiKey(), "ar_live_custom_prod_secret_token");

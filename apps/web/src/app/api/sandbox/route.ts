@@ -7,7 +7,7 @@ import { handleEvalScenario } from "../../../lib/sandbox/scenarios/eval";
 import {
   checkSandboxRateLimit,
   SANDBOX_RATE_LIMIT_MAX
-} from "../../../lib/sandbox/rateLimit.js";
+} from "../../../lib/sandbox/rateLimit";
 
 const sandboxBodySchema = z
   .object({

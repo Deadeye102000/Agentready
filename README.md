@@ -144,7 +144,7 @@ Agentready/
 | **Governance** | `GET` | `/api/v1/feature-flags` | List active feature flags | Session / Agent (`governance:read`) |
 | **Governance** | `PUT` | `/api/v1/feature-flags` | Upsert feature flag rule | Session (Owner/Admin) only, API keys not permitted |
 | **Governance** | `POST` | `/api/v1/feature-flags/toggle` | Toggle feature flag state | Session (Owner/Admin) only, API keys not permitted |
-| **Governance** | `GET` | `/api/v1/approval-requests` | List pending approval requests | Session |
+| **Governance** | `GET` | `/api/v1/approval-requests` | List pending approval requests | Session / Agent (`governance:read`) |
 | **Governance** | `POST` | `/api/v1/approval-requests/:id/review` | Approve or reject pending request | Session (Owner/Admin/Approver) only, API keys not permitted |
 | **Governance** | `GET` | `/api/v1/mcp-servers` | List registered MCP server gateways | Session / Agent (`governance:read`) |
 | **Evals**      | `POST` | `/api/v1/eval-runs` | Create single eval run | Session (Member+) / Agent (`eval:write`) |
@@ -257,29 +257,26 @@ erDiagram
 
 3. **Database Initialization**:
 
-   Choose the path matching your database environment:
+   Start local PostgreSQL in Docker, apply migrations, and seed baseline demo data:
 
-   #### Path A: Using Local Docker PostgreSQL
    ```bash
    # 1. Start PostgreSQL container
    docker compose up -d postgres
 
-   # 2. Run DB Migrations
+   # 2. Run DB Migrations (applies initial schema + raw SQL triggers)
    pnpm db:migrate
 
    # 3. Seed Baseline Demo Data
    pnpm db:seed
    ```
 
-   #### Path B: Using Supabase or External PostgreSQL (No Docker needed)
-   ```bash
-   # 1. Ensure DATABASE_URL and DIRECT_URL are configured in .env and prisma/.env
-   # 2. Push schema directly to database (avoids interactive migration reset prompts)
-   pnpm db:push
-
-   # 3. Seed Baseline Demo Data
-   pnpm db:seed
-   ```
+   > [!WARNING]
+   > **External PostgreSQL (Supabase / Neon / RDS)**:
+   > If deploying against a remote managed PostgreSQL instance, apply migrations using:
+   > ```bash
+   > pnpm db:deploy
+   > ```
+   > **Do NOT use `prisma db push`**. `prisma db push` only synchronizes declarative models and ignores migration SQL files, silently skipping the PostgreSQL immutability trigger (`audit_log_prevent_update_delete`) and foreign key restrict constraint. Running `db push` on external databases leaves audit logs mutable.
 
    > **Seeded Credentials**:
    > - **Web Console Login**: `demo@agentready.local` / `agentready-demo-password`
