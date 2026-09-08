@@ -214,6 +214,7 @@ mockPrisma.taskContract.create = async (args: any) => {
     allowedTools: data.allowedTools || [],
     requiredApprovals: data.requiredApprovals || [],
     evalSpec: data.evalSpec || {},
+    trajectoryPolicy: data.trajectoryPolicy || null,
     fileContent: data.fileContent || null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -828,9 +829,11 @@ mockPrisma.evalRun.create = async (args: any) => {
     name: data.name,
     status: data.status || "QUEUED",
     score: data.score !== undefined ? data.score : null,
+    trajectoryScore: data.trajectoryScore !== undefined ? data.trajectoryScore : 1.0,
     threshold: data.threshold !== undefined ? data.threshold : 1,
     checks: data.checks || [],
     findings: data.findings || [],
+    violations: data.violations || [],
     failureReason: data.failureReason || null,
     duration: data.duration !== undefined ? data.duration : null,
     startedAt: data.startedAt || new Date(),
@@ -867,6 +870,8 @@ mockPrisma.evalRun.findMany = async (args: any) => {
     const execution = mockStore.agentExecutions.find((e) => e.id === er.executionId);
     return {
       ...er,
+      trajectoryScore: er.trajectoryScore !== undefined ? er.trajectoryScore : 1.0,
+      violations: er.violations || [],
       agent: agent ? { id: agent.id, name: agent.name } : null,
       contract: contract ? { id: contract.id, name: contract.name, version: contract.version } : null,
       execution: execution ? { id: execution.id, status: execution.status, objective: execution.objective } : null,

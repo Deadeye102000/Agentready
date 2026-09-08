@@ -239,6 +239,7 @@ model TaskContract {
   allowedTools   String[]        @default([])
   requiredApprovals String[]     @default([])
   evalSpec       Json            @default("{}")
+  trajectoryPolicy Json?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -333,9 +334,11 @@ model EvalRun {
   name           String
   status         EvalRunStatus   @default(QUEUED)
   score          Float?
+  trajectoryScore Float?
   threshold      Float           @default(1)
   checks         Json            @default("[]")
   findings       Json            @default("[]")
+  violations     Json?           @default("[]")
   failureReason  String?
   duration       Int?
   startedAt      DateTime?
