@@ -1,22 +1,50 @@
 import type { CreateEvalRunInput } from "@agentready/shared";
 import type { PrismaClient } from "@agentready/db";
+import {
+  evaluateTrajectoryTraces,
+  type TrajectoryPolicy,
+  type TraceRecord
+} from "@agentready/agent-contracts";
 import { toInputJson } from "../../lib/json.js";
 import { HttpError } from "../../lib/httpError.js";
 import { AuditService } from "../audit/auditService.js";
+import { AuditRepository } from "../audit/auditRepository.js";
 import { TenancyService } from "../tenancy/tenancyService.js";
+import { TenancyRepository } from "../tenancy/tenancyRepository.js";
 import { GovernanceRepository } from "../governance/governanceRepository.js";
 import { EvalRunRepository } from "./evalRunRepository.js";
 import { AgentExecutionService } from "../agent-executions/agentExecutionService.js";
+import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
 
 export class EvalRunService {
+  private readonly evalRuns: EvalRunRepository;
+  private readonly audit: AuditService;
+  private readonly tenancy: TenancyService;
+  private readonly governance: GovernanceRepository;
+  private readonly executions: AgentExecutionService;
+
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly evalRuns: EvalRunRepository,
-    private readonly audit: AuditService,
-    private readonly tenancy: TenancyService,
-    private readonly governance: GovernanceRepository,
-    private readonly executions: AgentExecutionService
-  ) {}
+    evalRuns?: EvalRunRepository,
+    audit?: AuditService,
+    tenancy?: TenancyService,
+    governance?: GovernanceRepository,
+    executions?: AgentExecutionService
+  ) {
+    const gov = governance ?? new GovernanceRepository(prisma);
+    const aud = audit ?? new AuditService(new AuditRepository(prisma));
+    const ten = tenancy ?? new TenancyService(new TenancyRepository(prisma));
+    this.evalRuns = evalRuns ?? new EvalRunRepository(prisma);
+    this.audit = aud;
+    this.tenancy = ten;
+    this.governance = gov;
+    this.executions = executions ?? new AgentExecutionService(
+      new AgentExecutionRepository(prisma),
+      gov,
+      aud,
+      ten
+    );
+  }
 
   list(input: { organizationId: string; projectId?: string; executionId?: string; evalCaseId?: string }) {
     return this.evalRuns.list(input);
@@ -158,7 +186,15 @@ export class EvalRunService {
     return this.evalRuns.listCases(input);
   }
 
-  async runCase(input: { organizationId: string; caseId: string; actorUserId?: string }) {
+  async runCase(
+    inputOrOrgId: { organizationId: string; caseId: string; actorUserId?: string } | string,
+    caseIdArg?: string,
+    actorUserIdArg?: string
+  ) {
+    const input = typeof inputOrOrgId === "string"
+      ? { organizationId: inputOrOrgId, caseId: caseIdArg!, actorUserId: actorUserIdArg }
+      : inputOrOrgId;
+
     const isEvalEnabled = await this.governance.findFeatureFlag({
       organizationId: input.organizationId,
       capability: "eval_runner"
@@ -171,9 +207,14 @@ export class EvalRunService {
       });
     }
 
-    const evalCase = await this.evalRuns.findCaseById({
-      organizationId: input.organizationId,
-      id: input.caseId
+    const evalCase = await this.prisma.evalCase.findFirst({
+      where: {
+        id: input.caseId,
+        organizationId: input.organizationId
+      },
+      include: {
+        taskContract: true
+      }
     });
 
     if (!evalCase) {
@@ -201,10 +242,18 @@ export class EvalRunService {
       agentId = agents[0]?.id || "agent-1";
     }
 
+    let projectId = contract.projectId;
+    if (!projectId) {
+      const projects = await this.prisma.project.findMany({
+        where: { organizationId: input.organizationId }
+      });
+      projectId = projects[0]?.id || "project-1";
+    }
+
     // 1. Create the AgentExecution using standard service path
     const execution = await this.executions.create({
       organizationId: input.organizationId,
-      projectId: contract.projectId,
+      projectId,
       taskId: contract.taskId || undefined,
       contractId: contract.id,
       agentId,
@@ -229,9 +278,10 @@ export class EvalRunService {
     // 3. Record tool calls traces
     const recordedTools: string[] = [];
     const expectedTools = (evalCase.expectedTools as string[]) || [];
+    const traces: any[] = [];
 
     if (simulateFailure) {
-      await this.executions.recordToolCall({
+      const trace = await this.executions.recordToolCall({
         organizationId: input.organizationId,
         executionId: execution.id,
         agentId,
@@ -240,9 +290,10 @@ export class EvalRunService {
         input: {}
       });
       recordedTools.push("unexpected_tool");
+      traces.push(trace);
     } else {
       for (const tool of expectedTools) {
-        await this.executions.recordToolCall({
+        const trace = await this.executions.recordToolCall({
           organizationId: input.organizationId,
           executionId: execution.id,
           agentId,
@@ -251,6 +302,7 @@ export class EvalRunService {
           input: {}
         });
         recordedTools.push(tool);
+        traces.push(trace);
       }
     }
 
@@ -268,46 +320,91 @@ export class EvalRunService {
 
     const duration = Date.now() - startTime;
 
-    // 5. Evaluate the execution output (Scoring)
+    // 1. Existing baseline matches
     const statusMatch = targetStatus === evalCase.expectedStatus;
-    const toolsMatch = expectedTools.length === recordedTools.length &&
+    const toolsMatch =
+      expectedTools.length === recordedTools.length &&
       expectedTools.every((val, index) => val === recordedTools[index]);
 
-    const score = (Number(statusMatch) + Number(toolsMatch)) / 2;
-    const passed = score >= 1.0;
+    // 2. Trajectory Policy Evaluation (if present on contract)
+    let trajectoryScore = 1.0;
+    let violations: string[] = [];
+    let passed = false;
+    let score = 0;
+
+    const rawPolicy = (evalCase.taskContract as any)?.trajectoryPolicy;
+
+    if (rawPolicy && typeof rawPolicy === "object" && Array.isArray(rawPolicy.expectedSteps)) {
+      // Map execution tool traces to TraceRecord shape
+      const traceRecords: TraceRecord[] = traces.map((t: any, index: number) => ({
+        stepIndex: t.stepIndex ?? index + 1,
+        toolName: t.toolName,
+        inputPayload: t.inputPayload ?? {},
+        outputPayload: t.outputPayload ?? {},
+        gateStatus: t.gateStatus ?? "AUTOMATIC",
+        error: t.error ?? null,
+      }));
+
+      const trajectoryResult = evaluateTrajectoryTraces(traceRecords, rawPolicy as TrajectoryPolicy);
+      trajectoryScore = trajectoryResult.score;
+      violations = trajectoryResult.violations;
+
+      // Composite 3-part score: status (1) + tools (1) + trajectory (1) / 3
+      const statusNum = Number(statusMatch);
+      const toolsNum = Number(toolsMatch);
+      score = Number(((statusNum + toolsNum + trajectoryScore) / 3).toFixed(2));
+      passed = statusMatch && toolsMatch && trajectoryResult.passed;
+    } else {
+      // Backward-compatible 2-part scoring for existing tests
+      score = (Number(statusMatch) + Number(toolsMatch)) / 2;
+      passed = score === 1;
+    }
 
     let failureReason: string | null = null;
     if (!statusMatch) {
       failureReason = `Expected status ${evalCase.expectedStatus} but execution ended with ${targetStatus}.`;
     } else if (!toolsMatch) {
       failureReason = `Expected tool calls [${expectedTools.join(", ")}] but got [${recordedTools.join(", ")}].`;
+    } else if (violations.length > 0) {
+      failureReason = `Trajectory policy violations: ${violations.join("; ")}`;
     }
 
     const checks = [
       { name: "Status Match", pass: statusMatch, expected: evalCase.expectedStatus, actual: targetStatus },
       { name: "Tool Calls Match", pass: toolsMatch, expected: expectedTools, actual: recordedTools }
     ];
+    if (rawPolicy) {
+      checks.push({
+        name: "Trajectory Policy Match",
+        pass: violations.length === 0 && trajectoryScore === 1.0,
+        expected: (rawPolicy as any).expectedSteps?.length ?? 0,
+        actual: trajectoryScore
+      } as any);
+    }
 
     const findings = failureReason ? [failureReason] : ["All checks passed successfully."];
 
-    // 6. Save the EvalRun result
-    const evalRun = await this.evalRuns.create({
-      organizationId: input.organizationId,
-      projectId: contract.projectId,
-      executionId: execution.id,
-      contractId: contract.id,
-      agentId,
-      evalCaseId: evalCase.id,
-      name: `Eval Run: ${evalCase.name}`,
-      status: passed ? "PASSED" : "FAILED",
-      score,
-      threshold: 1.0,
-      checks,
-      findings,
-      failureReason,
-      duration,
-      startedAt: new Date(startTime),
-      completedAt: new Date()
+    // 3. Persist EvalRun with trajectory metadata
+    const evalRun = await this.prisma.evalRun.create({
+      data: {
+        organizationId: input.organizationId,
+        projectId: evalCase.taskContract?.projectId ?? projectId,
+        contractId: evalCase.taskContractId ?? contract.id,
+        evalCaseId: evalCase.id,
+        executionId: execution.id,
+        name: `${evalCase.name} - Run`,
+        status: passed ? "PASSED" : "FAILED",
+        score,
+        trajectoryScore,
+        violations: violations,
+        threshold: 1.0,
+        checks,
+        findings,
+        failureReason,
+        duration,
+        startedAt: new Date(startTime),
+        completedAt: new Date(),
+      },
     });
 
     await this.audit.record({

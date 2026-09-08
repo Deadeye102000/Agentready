@@ -200,12 +200,45 @@ mockPrisma.taskContract.count = async (args: any) => {
 
 mockPrisma.taskContract.create = async (args: any) => {
   const data = args.data;
+  let projectId = data.projectId;
+  if (!projectId) {
+    let existing = mockStore.projects.find((p) => p.organizationId === data.organizationId);
+    if (!existing) {
+      existing = {
+        id: "proj-" + genId(),
+        organizationId: data.organizationId,
+        name: "Default Project",
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockStore.projects.push(existing);
+    }
+    projectId = existing.id;
+  }
+
+  let agentId = data.agentId;
+  if (!agentId) {
+    let existing = mockStore.agentIdentities.find((a) => a.organizationId === data.organizationId);
+    if (!existing) {
+      existing = {
+        id: "agent-" + genId(),
+        organizationId: data.organizationId,
+        name: "Default Agent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockStore.agentIdentities.push(existing);
+    }
+    agentId = existing.id;
+  }
+
   const contract = {
     id: data.id || Math.random().toString(36).slice(2, 12),
     organizationId: data.organizationId,
-    projectId: data.projectId || null,
+    projectId,
     taskId: data.taskId || null,
-    agentId: data.agentId || null,
+    agentId,
     name: data.name,
     version: data.version ?? 1,
     objective: data.objective || "",
