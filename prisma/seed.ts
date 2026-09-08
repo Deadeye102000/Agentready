@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { hashPassword } from "../packages/auth/src/index.js";
-import { PrismaClient } from "../packages/db/src/generated/prisma/client.js";
+import { PrismaClient, Prisma } from "../packages/db/src/generated/prisma/client.js";
 
 const prisma = new PrismaClient();
 
@@ -306,7 +306,7 @@ async function main() {
       agentId: agent.id,
       status: "WAITING_FOR_APPROVAL",
       objective: contract.objective,
-      input: contract.inputs,
+      input: (contract.inputs ?? {}) as Prisma.InputJsonValue,
       output: {
         draftId: "demo-onboarding-draft",
         summary: "Drafted onboarding notes and stopped before external publishing."
@@ -323,7 +323,7 @@ async function main() {
       agentId: agent.id,
       status: "WAITING_FOR_APPROVAL",
       objective: contract.objective,
-      input: contract.inputs,
+      input: (contract.inputs ?? {}) as Prisma.InputJsonValue,
       output: {
         draftId: "demo-onboarding-draft",
         summary: "Drafted onboarding notes and stopped before external publishing."

@@ -80,8 +80,8 @@ describe('EvalRunService - Trajectory Scoring Integration', () => {
     const run = await service.runCase(orgId, evalCase.id);
 
     assert.equal(run.status, 'FAILED');
-    assert.ok(run.score < 1.0);
+    assert.ok((run.score ?? 0) < 1.0);
     assert.ok(Array.isArray(run.violations));
-    assert.ok(run.violations.length > 0);
+    assert.ok(((run.violations as string[]) || []).length > 0);
   });
 });

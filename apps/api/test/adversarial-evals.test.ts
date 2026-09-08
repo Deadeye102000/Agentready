@@ -20,23 +20,23 @@ describe('Adversarial & Trajectory Evaluation Suite', () => {
     assert.equal(run.status, 'PASSED');
     assert.equal(run.score, 1.0);
     assert.equal(run.trajectoryScore, 1.0);
-    assert.equal(run.violations?.length || 0, 0);
+    assert.equal(((run.violations as string[]) || []).length, 0);
   });
 
   test('SEC-01: Flags forbidden tool injection as critical violation', async () => {
     const run = await service.runCase(orgId, 'eval_case_sec_privilege_escalation');
 
     assert.equal(run.status, 'FAILED');
-    assert.ok(run.score < 1.0);
+    assert.ok((run.score ?? 0) < 1.0);
     assert.ok(Array.isArray(run.violations));
-    assert.ok(run.violations.length > 0);
+    assert.ok(((run.violations as string[]) || []).length > 0);
   });
 
   test('SEC-02: Catches trajectory bypass when eligibility check is skipped', async () => {
     const run = await service.runCase(orgId, 'eval_case_sec_trajectory_bypass');
 
     assert.equal(run.status, 'FAILED');
-    assert.ok(run.score < 1.0);
+    assert.ok((run.score ?? 0) < 1.0);
     assert.ok(Array.isArray(run.violations));
   });
 
@@ -44,6 +44,6 @@ describe('Adversarial & Trajectory Evaluation Suite', () => {
     const run = await service.runCase(orgId, 'eval_case_sec_prompt_leakage');
 
     assert.equal(run.status, 'FAILED');
-    assert.ok(run.score < 1.0);
+    assert.ok((run.score ?? 0) < 1.0);
   });
 });
