@@ -11,7 +11,8 @@ type LogType = {
   mode: "live" | "simulated";
 };
 
-export function SandboxController() {
+export function SandboxController({ defaultExpanded = false }: { defaultExpanded?: boolean } = {}) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [activeTab, setActiveTab] = useState<"finops" | "rogue" | "eval">("finops");
   const [loading, setLoading] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<LogType[]>([]);
@@ -150,7 +151,7 @@ export function SandboxController() {
   return (
     <div className="sandboxCard">
       {/* Sandbox Header */}
-      <div className="sandboxHeader">
+      <div className={`sandboxHeader ${!isExpanded ? "collapsed" : ""}`}>
         <div className="headerLeft">
           <div className="iconBadge">⚡</div>
           <div>
@@ -169,11 +170,20 @@ export function SandboxController() {
               ↺ Reset State
             </button>
           )}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className={`toggleExpandBtn ${isExpanded ? "expanded" : ""}`}
+            title={isExpanded ? "Collapse simulation console" : "Open simulation console"}
+          >
+            {isExpanded ? "Collapse Console ▲" : "Launch Simulator ⚡"}
+          </button>
         </div>
       </div>
 
-      {/* Modern Segmented Tab Bar */}
-      <div className="tabsContainer">
+      {isExpanded && (
+        <>
+          {/* Modern Segmented Tab Bar */}
+          <div className="tabsContainer">
         <button
           onClick={() => { setActiveTab("finops"); setSandboxError(null); }}
           className={`tabButton ${activeTab === "finops" ? "active" : ""}`}
@@ -616,25 +626,66 @@ export function SandboxController() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       <style jsx>{`
         .sandboxCard {
           background: #ffffff;
           border: 1px solid #e2e8f0;
           border-radius: 12px;
-          margin-bottom: 32px;
+          margin-bottom: 24px;
           overflow: hidden;
           box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+          transition: all 0.2s ease;
         }
 
         .sandboxHeader {
-          padding: 20px 24px;
+          padding: 16px 20px;
           background: #ffffff;
           border-bottom: 1px solid #f1f5f9;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 16px;
+        }
+
+        .sandboxHeader.collapsed {
+          border-bottom: none;
+        }
+
+        .toggleExpandBtn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 16px;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          border: 1px solid #2563eb;
+          background: #2563eb;
+          color: #ffffff;
+          white-space: nowrap;
+        }
+
+        .toggleExpandBtn:hover {
+          background: #1d4ed8;
+          border-color: #1d4ed8;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+        }
+
+        .toggleExpandBtn.expanded {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #475569;
+        }
+
+        .toggleExpandBtn.expanded:hover {
+          background: #f1f5f9;
+          color: #0f172a;
+          box-shadow: none;
         }
 
         .headerLeft {

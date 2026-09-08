@@ -117,7 +117,7 @@ export default async function HomePage() {
     newlyPassing: []
   };
 
-  // Metric Computations for 7 Overview KPI Cards
+  // Metric Computations for 4 Primary Overview KPI Cards
   const totalExecutions = dashboard.metrics.executions;
   const failedExecutions = dashboard.metrics.failedExecutions;
   const succeededExecutions = Math.max(
@@ -150,16 +150,16 @@ export default async function HomePage() {
           </p>
         </section>
 
-        {/* 7 Required Overview Dashboard KPI Cards (Top of Dashboard) */}
-        <section className="metricGrid" aria-label="Harness KPI Metrics">
-          <div className="metricCard">
+        {/* 4 Primary Overview Dashboard KPI Cards */}
+        <section className="metricGrid" aria-label="Primary Governance KPI Metrics">
+          <Link href="/executions" className="metricCard">
             <div className="metricHeader">
               <span className="metricLabel">Total Executions</span>
               <span className="pill">ALL RUNS</span>
             </div>
             <div className="metricValue">{totalExecutions}</div>
             <div className="metricSubtext">Lifetime agent execution runs</div>
-          </div>
+          </Link>
 
           <div className="metricCard">
             <div className="metricHeader">
@@ -169,395 +169,371 @@ export default async function HomePage() {
               </span>
             </div>
             <div className="metricValue">{formatPercent(successRate)}</div>
-            <div className="metricSubtext">Completed non-failed runs</div>
+            <div className="metricSubtext">{succeededExecutions} completed runs without blocks</div>
           </div>
 
-          <div className="metricCard">
-            <div className="metricHeader">
-              <span className="metricLabel">Failed Executions</span>
-              <span className={`pill ${failedExecutions > 0 ? "bad" : "good"}`}>
-                {failedExecutions === 0 ? "ZERO FAILS" : "ACTION REQ"}
-              </span>
-            </div>
-            <div className="metricValue">{failedExecutions}</div>
-            <div className="metricSubtext">Terminal error state runs</div>
-          </div>
-
-          <div className="metricCard">
+          <Link href="/approval-queue" className="metricCard">
             <div className="metricHeader">
               <span className="metricLabel">Pending Approvals</span>
               <span className={`pill ${pendingApprovals > 0 ? "warn" : "good"}`}>
-                {pendingApprovals > 0 ? "IN QUEUE" : "CLEARED"}
+                {pendingApprovals > 0 ? "ACTION REQ" : "CLEARED"}
               </span>
             </div>
-            <div className="metricValue">{pendingApprovals}</div>
-            <div className="metricSubtext">Awaiting human operator review</div>
-          </div>
+            <div className="metricValue" style={{ color: pendingApprovals > 0 ? "#b45309" : undefined }}>
+              {pendingApprovals}
+            </div>
+            <div className="metricSubtext">
+              {pendingApprovals > 0 ? "Awaiting human operator review" : "No blocked actions in queue"}
+            </div>
+          </Link>
 
-          <div className="metricCard">
+          <Link href="/evals" className="metricCard">
             <div className="metricHeader">
-              <span className="metricLabel">Eval Pass Rate</span>
+              <span className="metricLabel">Eval Compliance</span>
               <span className={`pill ${evalPassRate !== null && evalPassRate >= 0.8 ? "good" : "warn"}`}>
                 {evalPassRate !== null && evalPassRate >= 0.8 ? "COMPLIANT" : "REGRESSED"}
               </span>
             </div>
             <div className="metricValue">{formatPercent(evalPassRate)}</div>
-            <div className="metricSubtext">Compliance suite pass rate</div>
-          </div>
+            <div className="metricSubtext">
+              {dashboard.metrics.passedEvalRuns} of {dashboard.metrics.evalRuns} eval suites passed
+            </div>
+          </Link>
+        </section>
 
-          <div className="metricCard">
-            <div className="metricHeader">
-              <span className="metricLabel">Disabled Flags</span>
-              <span className={`pill ${disabledCriticalFlags > 0 ? "warn" : "good"}`}>
-                {disabledCriticalFlags > 0 ? "GUARDED" : "ALL ACTIVE"}
+        {/* System Health Ribbon */}
+        <section className="healthRibbon" aria-label="System Connectivity & Guardrail Health">
+          <div className="healthRibbonGroup">
+            <Link href="/mcp" className="healthRibbonItem" title="View Model Context Protocol servers">
+              <span className="healthDot"></span>
+              <span>
+                <strong>{registeredMcpServers}</strong> MCP Server{registeredMcpServers === 1 ? "" : "s"} Online
               </span>
-            </div>
-            <div className="metricValue">{disabledCriticalFlags}</div>
-            <div className="metricSubtext">Capabilities currently blocked</div>
+            </Link>
+
+            <Link href="/approval-queue" className="healthRibbonItem" title="View active capability approval gates">
+              <span className="healthDot"></span>
+              <span>
+                <strong>{dashboard.approvalGates.length}</strong> Approval Gates Active
+              </span>
+            </Link>
+
+            <Link href="/feature-flags" className="healthRibbonItem" title="View capability feature flags">
+              <span className={`healthDot ${disabledCriticalFlags > 0 ? "warn" : ""}`}></span>
+              <span>
+                <strong>{dashboard.featureFlags.length}</strong> Feature Flags ({disabledCriticalFlags} Guarded)
+              </span>
+            </Link>
+
+            <Link href="/traces" className="healthRibbonItem" title="View tool-call traces">
+              <span className="healthDot"></span>
+              <span>
+                <strong>{dashboard.metrics.toolCalls}</strong> Tool Traces ({dashboard.metrics.blockedToolCalls} Blocked)
+              </span>
+            </Link>
           </div>
 
-          <div className="metricCard">
-            <div className="metricHeader">
-              <span className="metricLabel">MCP Servers</span>
-              <span className="pill good">ONLINE</span>
-            </div>
-            <div className="metricValue">{registeredMcpServers}</div>
-            <div className="metricSubtext">Registered gateway interfaces</div>
+          <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
+            Deterministic Continuous Evaluation Active
           </div>
         </section>
 
-        {/* Interactive Testing & Simulation Sandbox */}
-        <SandboxController />
+        {/* Interactive Testing & Simulation Sandbox (Collapsible) */}
+        <SandboxController defaultExpanded={false} />
 
-        {/* Dashboard Workspace Panels */}
+        {/* Dashboard Two-Column Workspace */}
         <section className="workspace">
-          {/* Evaluation Regression Card */}
-          <div className="panel wide">
-            <div className="panelHeader">
-              <h2>Evaluation regression analysis</h2>
-              <span>Comparing latest run batch against historical baseline</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
-                <span className="muted">Score comparison</span>
-                <strong style={{ fontSize: "1.5rem" }}>
-                  {formatPercent(regression.currentScore)}
-                  {regression.delta !== null && (
-                    <span
-                      style={{
-                        fontSize: "0.875rem",
-                        marginLeft: "0.5rem",
-                        color: regression.delta >= 0 ? "#10b981" : "#ef4444"
-                      }}
-                    >
-                      {regression.delta >= 0 ? "+" : ""}
-                      {formatPercent(regression.delta)}
-                    </span>
-                  )}
-                </strong>
-                <span className="muted" style={{ fontSize: "0.875rem" }}>
-                  Previous: {formatPercent(regression.previousScore)}
-                </span>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
-                <span className="muted">Pass rate change</span>
-                <strong style={{ fontSize: "1.5rem" }}>
-                  {formatPercent(regression.currentPassRate)}
-                  {regression.passRateChange !== null && (
-                    <span
-                      style={{
-                        fontSize: "0.875rem",
-                        marginLeft: "0.5rem",
-                        color: regression.passRateChange >= 0 ? "#10b981" : "#ef4444"
-                      }}
-                    >
-                      {regression.passRateChange >= 0 ? "+" : ""}
-                      {formatPercent(regression.passRateChange)}
-                    </span>
-                  )}
-                </strong>
-                <span className="muted" style={{ fontSize: "0.875rem" }}>
-                  Previous: {formatPercent(regression.previousPassRate)}
-                </span>
-              </div>
-            </div>
-
-            <div style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-              <div>
-                <h3
-                  style={{
-                    fontSize: "0.9rem",
-                    fontWeight: "bold",
-                    marginBottom: "0.5rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.25rem"
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "50%",
-                      backgroundColor: "#10b981"
-                    }}
-                  ></span>
-                  Newly passing ({regression.newlyPassing.length})
-                </h3>
-                <div className="stack" style={{ fontSize: "0.875rem" }}>
-                  {regression.newlyPassing.map((c) => (
-                    <div key={c.id} className="compactRow" style={{ padding: "0.5rem 0" }}>
-                      <span>{c.name}</span>
-                      <span className="pill good">PASSED</span>
-                    </div>
-                  ))}
-                  {regression.newlyPassing.length === 0 && (
-                    <span className="muted" style={{ display: "block", padding: "0.5rem 0" }}>
-                      None
-                    </span>
-                  )}
+          {/* Column 1: Pending Approvals & Recent Executions */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Pending Approvals Panel */}
+            <div className="panel">
+              <div className="panelHeader">
+                <div>
+                  <h2>Pending approvals</h2>
+                  <span>{dashboard.pendingApprovalsList.length} request(s) awaiting review</span>
                 </div>
+                <Link href="/approval-queue" className="viewAllLink">
+                  Open Queue →
+                </Link>
               </div>
-
-              <div>
-                <h3
-                  style={{
-                    fontSize: "0.9rem",
-                    fontWeight: "bold",
-                    marginBottom: "0.5rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.25rem"
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "50%",
-                      backgroundColor: "#ef4444"
-                    }}
-                  ></span>
-                  Newly failing ({regression.newlyFailing.length})
-                </h3>
-                <div className="stack" style={{ fontSize: "0.875rem" }}>
-                  {regression.newlyFailing.map((c) => (
-                    <div key={c.id} className="compactRow" style={{ padding: "0.5rem 0" }}>
-                      <span>{c.name}</span>
-                      <span className="pill bad">FAILED</span>
-                    </div>
-                  ))}
-                  {regression.newlyFailing.length === 0 && (
-                    <span className="muted" style={{ display: "block", padding: "0.5rem 0" }}>
-                      None
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Execution Harness */}
-          <div className="panel wide">
-            <div className="panelHeader">
-              <h2>Execution harness</h2>
-              <span>{dashboard.metrics.failedExecutions} failed</span>
-            </div>
-            {dashboard.recentExecutions.length > 0 ? (
-              <div className="executionList">
-                {dashboard.recentExecutions.map((execution) => (
-                  <Link
-                    href={`/executions/${execution.id}`}
-                    key={execution.id}
-                    style={{ textDecoration: "none", color: "inherit", display: "block" }}
-                  >
-                    <article className="execution">
+              {dashboard.pendingApprovalsList.length > 0 ? (
+                <div className="stack">
+                  {dashboard.pendingApprovalsList.map((request) => (
+                    <Link
+                      href="/approval-queue"
+                      key={request.id}
+                      className="compactRow"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
                       <div>
-                        <div className="rowTitle">{execution.objective}</div>
-                        <div className="muted">
-                          {execution.agent.name} · {execution.contract?.name ?? "No contract"} v
-                          {execution.contract?.version ?? 0}
+                        <strong>{request.requestedAction}</strong>
+                        <span className="muted">
+                          {request.agent.name} · {request.reason}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span className="pill warn">{request.status}</span>
+                        <span className="viewAllLink" style={{ fontSize: "0.78rem" }}>Review →</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="Zero Pending Approvals"
+                  message="All clear! No autonomous agent actions are currently blocked awaiting human review."
+                />
+              )}
+            </div>
+
+            {/* Recent Executions Panel */}
+            <div className="panel">
+              <div className="panelHeader">
+                <div>
+                  <h2>Recent executions</h2>
+                  <span>{totalExecutions} total run(s)</span>
+                </div>
+                <Link href="/executions" className="viewAllLink">
+                  View All ({totalExecutions}) →
+                </Link>
+              </div>
+              {dashboard.recentExecutions.length > 0 ? (
+                <div className="executionList">
+                  {dashboard.recentExecutions.slice(0, 5).map((execution) => (
+                    <Link
+                      href={`/executions/${execution.id}`}
+                      key={execution.id}
+                      style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                    >
+                      <article className="execution">
+                        <div>
+                          <div className="rowTitle">{execution.objective}</div>
+                          <div className="muted">
+                            {execution.agent.name} · {execution.contract?.name ?? "No contract"} v
+                            {execution.contract?.version ?? 0}
+                          </div>
                         </div>
-                      </div>
-                      <div className="executionStats">
-                        <span className={`pill ${statusClass(execution.status)}`}>{execution.status}</span>
-                        <span>{execution._count.toolCallTraces} traces</span>
-                        <span>{execution._count.evalRuns} evals</span>
-                        <span>Risk {execution.riskScore}</span>
-                      </div>
-                    </article>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Executions Recorded"
-                message="Create a task contract and trigger an agent run to begin observing executions."
-              />
-            )}
+                        <div className="executionStats">
+                          <span className={`pill ${statusClass(execution.status)}`}>{execution.status}</span>
+                          <span>{execution._count.toolCallTraces} traces</span>
+                          <span>{execution._count.evalRuns} evals</span>
+                          <span className="pill" style={{ fontSize: "0.72rem" }}>Risk {execution.riskScore}</span>
+                        </div>
+                      </article>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No Executions Recorded"
+                  message="Create a task contract and trigger an agent run to begin observing executions."
+                />
+              )}
+            </div>
           </div>
 
-          {/* Pending Approvals */}
-          <div className="panel">
-            <div className="panelHeader">
-              <h2>Pending approvals</h2>
-              <span>{dashboard.pendingApprovalsList.length} request(s)</span>
+          {/* Column 2: Evaluation Regression & Security Guardrails */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Evaluation Regression Card */}
+            <div className="panel">
+              <div className="panelHeader">
+                <div>
+                  <h2>Evaluation regression</h2>
+                  <span>Historical contract assertion delta</span>
+                </div>
+                <Link href="/evals" className="viewAllLink">
+                  Open Evals →
+                </Link>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
+                  <span className="muted">Score comparison</span>
+                  <strong style={{ fontSize: "1.5rem" }}>
+                    {formatPercent(regression.currentScore)}
+                    {regression.delta !== null && (
+                      <span
+                        style={{
+                          fontSize: "0.875rem",
+                          marginLeft: "0.5rem",
+                          color: regression.delta >= 0 ? "#10b981" : "#ef4444"
+                        }}
+                      >
+                        {regression.delta >= 0 ? "+" : ""}
+                        {formatPercent(regression.delta)}
+                      </span>
+                    )}
+                  </strong>
+                  <span className="muted" style={{ fontSize: "0.82rem" }}>
+                    Previous: {formatPercent(regression.previousScore)}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start" }}>
+                  <span className="muted">Pass rate change</span>
+                  <strong style={{ fontSize: "1.5rem" }}>
+                    {formatPercent(regression.currentPassRate)}
+                    {regression.passRateChange !== null && (
+                      <span
+                        style={{
+                          fontSize: "0.875rem",
+                          marginLeft: "0.5rem",
+                          color: regression.passRateChange >= 0 ? "#10b981" : "#ef4444"
+                        }}
+                      >
+                        {regression.passRateChange >= 0 ? "+" : ""}
+                        {formatPercent(regression.passRateChange)}
+                      </span>
+                    )}
+                  </strong>
+                  <span className="muted" style={{ fontSize: "0.82rem" }}>
+                    Previous: {formatPercent(regression.previousPassRate)}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "1.25rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <h3
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: "bold",
+                      marginBottom: "0.5rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem"
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        backgroundColor: "#10b981"
+                      }}
+                    ></span>
+                    Newly passing ({regression.newlyPassing.length})
+                  </h3>
+                  <div className="stack" style={{ fontSize: "0.82rem" }}>
+                    {regression.newlyPassing.slice(0, 3).map((c) => (
+                      <div key={c.id} className="compactRow" style={{ padding: "0.4rem 0.6rem" }}>
+                        <span>{c.name}</span>
+                        <span className="pill good">PASSED</span>
+                      </div>
+                    ))}
+                    {regression.newlyPassing.length === 0 && (
+                      <span className="muted" style={{ display: "block", padding: "0.4rem 0" }}>
+                        None
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h3
+                    style={{
+                      fontSize: "0.85rem",
+                      fontWeight: "bold",
+                      marginBottom: "0.5rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem"
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        backgroundColor: "#ef4444"
+                      }}
+                    ></span>
+                    Newly failing ({regression.newlyFailing.length})
+                  </h3>
+                  <div className="stack" style={{ fontSize: "0.82rem" }}>
+                    {regression.newlyFailing.slice(0, 3).map((c) => (
+                      <div key={c.id} className="compactRow" style={{ padding: "0.4rem 0.6rem" }}>
+                        <span>{c.name}</span>
+                        <span className="pill bad">FAILED</span>
+                      </div>
+                    ))}
+                    {regression.newlyFailing.length === 0 && (
+                      <span className="muted" style={{ display: "block", padding: "0.4rem 0" }}>
+                        None
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            {dashboard.pendingApprovalsList.length > 0 ? (
-              <div className="stack">
-                {dashboard.pendingApprovalsList.map((request) => (
-                  <div className="compactRow" key={request.id}>
-                    <div>
-                      <strong>{request.requestedAction}</strong>
-                      <span className="muted">
-                        {request.agent.name} · {request.reason}
+
+            {/* Runtime Guardrails & Infrastructure Summary */}
+            <div className="panel">
+              <div className="panelHeader">
+                <div>
+                  <h2>Runtime policies & guardrails</h2>
+                  <span>Active security & platform interfaces</span>
+                </div>
+                <Link href="/audit-logs" className="viewAllLink">
+                  Audit Logs →
+                </Link>
+              </div>
+
+              <div className="guardrailSummaryList">
+                <Link href="/approval-queue" className="guardrailRow">
+                  <div className="guardrailLeft">
+                    <div className="guardrailIcon">🛡️</div>
+                    <div className="guardrailMeta">
+                      <span className="guardrailTitle">Capability Approval Gates</span>
+                      <span className="guardrailDesc">
+                        {dashboard.approvalGates.length} active human-in-the-loop policies
                       </span>
                     </div>
-                    <span className="pill warn">{request.status}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Pending Approvals"
-                message="All caught up! No high-risk actions are awaiting human review."
-              />
-            )}
-          </div>
+                  <span className="guardrailAction">Manage Gates →</span>
+                </Link>
 
-          {/* Approval Gates */}
-          <div className="panel">
-            <div className="panelHeader">
-              <h2>Approval gates</h2>
-              <span>{dashboard.approvalGates.length} active</span>
-            </div>
-            {dashboard.approvalGates.length > 0 ? (
-              <div className="stack">
-                {dashboard.approvalGates.map((gate) => (
-                  <div className="compactRow" key={gate.id}>
-                    <div>
-                      <strong>{gate.capability}</strong>
-                      <span>{gate.reason || "No policy note provided"}</span>
-                    </div>
-                    <span className={`pill ${statusClass(gate.mode)}`}>{gate.mode}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Approval Gates"
-                message="Configure approval gates to enforce policies on risky tool capabilities."
-              />
-            )}
-          </div>
-
-          {/* Tool Tracing */}
-          <div className="panel">
-            <div className="panelHeader">
-              <h2>Tool-call tracing</h2>
-              <span>{dashboard.metrics.blockedToolCalls} blocked</span>
-            </div>
-            {dashboard.recentToolCalls.length > 0 ? (
-              <div className="stack">
-                {dashboard.recentToolCalls.map((trace) => (
-                  <div className="compactRow" key={trace.id}>
-                    <div>
-                      <strong>{trace.toolName}</strong>
-                      <span>{trace.error ?? `${trace.agent.name} · ${trace.latencyMs ?? 0}ms`}</span>
-                    </div>
-                    <span className={`pill ${statusClass(trace.status)}`}>{trace.status}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Tool Traces"
-                message="No agent tool calls logged yet in this workspace."
-              />
-            )}
-          </div>
-
-          {/* Eval Runs */}
-          <div className="panel">
-            <div className="panelHeader">
-              <h2>Eval runs</h2>
-              <span>{dashboard.metrics.evalRuns} total</span>
-            </div>
-            {dashboard.recentEvalRuns.length > 0 ? (
-              <div className="stack">
-                {dashboard.recentEvalRuns.map((evalRun) => (
-                  <div className="compactRow" key={evalRun.id}>
-                    <div>
-                      <strong>{evalRun.name}</strong>
-                      <span>
-                        Score {formatPercent(evalRun.score)} · threshold {formatPercent(evalRun.threshold)}
+                <Link href="/feature-flags" className="guardrailRow">
+                  <div className="guardrailLeft">
+                    <div className="guardrailIcon">🚩</div>
+                    <div className="guardrailMeta">
+                      <span className="guardrailTitle">Capability Feature Flags</span>
+                      <span className="guardrailDesc">
+                        {dashboard.featureFlags.length} configured ({disabledCriticalFlags} guarded / disabled)
                       </span>
                     </div>
-                    <span className={`pill ${statusClass(evalRun.status)}`}>{evalRun.status}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Eval Runs"
-                message="Execute an evaluation suite to verify agent compliance against contracts."
-              />
-            )}
-          </div>
+                  <span className="guardrailAction">Configure Flags →</span>
+                </Link>
 
-          {/* Capability Flags */}
-          <div className="panel">
-            <div className="panelHeader">
-              <h2>Capability flags</h2>
-              <span>{dashboard.featureFlags.length} flags</span>
-            </div>
-            {dashboard.featureFlags.length > 0 ? (
-              <div className="stack">
-                {dashboard.featureFlags.map((flag) => (
-                  <div className="compactRow" key={flag.id}>
-                    <div>
-                      <strong>{flag.capability}</strong>
-                      <span>{flag.agent?.name ?? "Organization-wide"}</span>
+                <Link href="/mcp" className="guardrailRow">
+                  <div className="guardrailLeft">
+                    <div className="guardrailIcon">🔌</div>
+                    <div className="guardrailMeta">
+                      <span className="guardrailTitle">Model Context Protocol (MCP)</span>
+                      <span className="guardrailDesc">
+                        {registeredMcpServers} gateway interface(s) registered
+                      </span>
                     </div>
-                    <span className={`pill ${statusClass(flag.state)}`}>{flag.state}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="No Feature Flags"
-                message="No feature flags configured for this organization."
-              />
-            )}
-          </div>
+                  <span className="guardrailAction">View Gateway →</span>
+                </Link>
 
-          {/* MCP Server Support */}
-          <div className="panel wide">
-            <div className="panelHeader">
-              <h2>Registered MCP servers</h2>
-              <span>{dashboard.mcpServers.length} server(s)</span>
-            </div>
-            {dashboard.mcpServers.length > 0 ? (
-              <div className="mcpGrid">
-                {dashboard.mcpServers.map((server) => (
-                  <div className="mcpRow" key={server.id}>
-                    <div>
-                      <strong>{server.name}</strong>
-                      <span>{server.capabilities.join(", ")}</span>
+                <Link href="/traces" className="guardrailRow">
+                  <div className="guardrailLeft">
+                    <div className="guardrailIcon">📡</div>
+                    <div className="guardrailMeta">
+                      <span className="guardrailTitle">Tool Call Telemetry</span>
+                      <span className="guardrailDesc">
+                        {dashboard.metrics.toolCalls} calls recorded ({dashboard.metrics.blockedToolCalls} blocked)
+                      </span>
                     </div>
-                    <span className={`pill ${statusClass(server.status)}`}>{server.status}</span>
                   </div>
-                ))}
+                  <span className="guardrailAction">Inspect Traces →</span>
+                </Link>
               </div>
-            ) : (
-              <EmptyState
-                title="No MCP Servers Registered"
-                message="Register Model Context Protocol servers to expose external tools to your agents."
-              />
-            )}
+            </div>
           </div>
         </section>
       </main>
