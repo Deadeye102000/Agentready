@@ -75,7 +75,7 @@ async function runCliRegressionHarness() {
       ? `${C.bgGreen}${C.bold} PASS ${C.reset}`
       : `${C.bgRed}${C.bold} FAIL ${C.reset}`;
 
-    const scoreDisplay = `Score: ${(run.score * 100).toFixed(0)}% (Trajectory: ${((run.trajectoryScore ?? 1) * 100).toFixed(0)}%)`;
+    const scoreDisplay = `Score: ${((run.score ?? 0) * 100).toFixed(0)}% (Trajectory: ${((run.trajectoryScore ?? 1) * 100).toFixed(0)}%)`;
 
     console.log(`${caseNum} ${statusBadge} ${C.bold}${testCase.name}${C.reset} — ${C.dim}${scoreDisplay}${C.reset}`);
 
