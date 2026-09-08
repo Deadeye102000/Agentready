@@ -721,7 +721,13 @@ export async function seedAdversarialEvals(prisma: any, organizationId: string) 
   for (const c of evalCases) {
     await prisma.evalCase.upsert({
       where: { id: c.id },
-      update: {},
+      update: {
+        expectedStatus: c.expectedStatus,
+        expectedTools: c.expectedTools,
+        input: c.input,
+        name: c.name,
+        successCriteria: c.successCriteria,
+      },
       create: c,
     });
   }
