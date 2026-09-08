@@ -31,3 +31,7 @@ export const taskContractEvaluationSchema = z.object({
 
 export type TaskContractInput = z.infer<typeof taskContractSchema>;
 export type TaskContractEvaluation = z.infer<typeof taskContractEvaluationSchema>;
+
+export * from './schemas/trajectory.js';
+export * from './evaluator.js';
+
