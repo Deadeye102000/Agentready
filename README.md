@@ -369,6 +369,21 @@ The test suite covers **186 total tests across 46 suites**, split into two disti
 | **Concurrent Claim Race** | 1 | [`apps/api/test-integration/concurrency.integration.test.ts`](apps/api/test-integration/concurrency.integration.test.ts) | 10 parallel `PrismaClient` worker connections racing atomic `updateMany` claiming 20 queued executions with 0 double-claims |
 | **Role Revocation & AuditLog Integrity** | 5 | [`apps/api/test-integration/rbac-revocation.integration.test.ts`](apps/api/test-integration/rbac-revocation.integration.test.ts) | Real Postgres: ADMIN→VIEWER demotion takes effect on next request; membership removal denies access; FK `RESTRICT` blocks org deletion with audit logs; immutability trigger blocks UPDATE/DELETE in real Postgres |
 
+#### 🔄 Continuous Integration & Pull Request Quality Gate (`.github/workflows/agent-regression.yml`)
+
+Every pull request against `master` and `main` is gated by the **Agent Regression & Quality Gate** GitHub Actions workflow:
+
+- **Ephemeral PostgreSQL 16 Service Container**: Spun up on port 5432 with health checks, schema migrations (`pnpm db:deploy`), and seed contracts (`pnpm db:seed`).
+- **Required Quality Checks**:
+  1. `pnpm typecheck` (zero TypeScript compilation errors across all workspace packages)
+  2. `pnpm test:api` (131 API unit tests, RBAC matrices, and state machine transitions)
+  3. `pnpm test:web` (35 Next.js smoke & data contract tests)
+  4. `pnpm test:mcp` (3 MCP server unit tests)
+  5. `pnpm --filter @agentready/agent-contracts test` (2 Trajectory evaluator tests)
+  6. `pnpm eval:regression` (**Continuous Trajectory Regression Gate** — exits with non-zero code if any trajectory policy violation, forbidden tool call, or score regression is detected)
+  7. `pnpm test:integration` (15 real PostgreSQL integration tests against Testcontainers)
+- **Deployment Invariant**: Any trajectory violation or test failure fails the GitHub Actions check and blocks PR merge.
+
 ---
 
 ## 🗺️ Roadmap & Future Expansion Plans

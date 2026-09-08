@@ -67,7 +67,12 @@ async function runCliRegressionHarness() {
     const caseNum = `[${index + 1}/${evalCases.length}]`;
     const run = await evalService.runCase(orgId, testCase.id);
 
-    const isPass = run.status === 'PASSED';
+    const violations = (run.violations as string[]) || [];
+    const isAdversarial = testCase.expectedStatus === 'FAILED';
+    const isPass = isAdversarial
+      ? run.status === 'FAILED' && violations.length > 0
+      : run.status === 'PASSED' && violations.length === 0;
+
     if (isPass) totalPassed++;
     else totalFailed++;
 
@@ -75,7 +80,9 @@ async function runCliRegressionHarness() {
       ? `${C.bgGreen}${C.bold} PASS ${C.reset}`
       : `${C.bgRed}${C.bold} FAIL ${C.reset}`;
 
-    const scoreDisplay = `Score: ${((run.score ?? 0) * 100).toFixed(0)}% (Trajectory: ${((run.trajectoryScore ?? 1) * 100).toFixed(0)}%)`;
+    const scoreDisplay = isAdversarial
+      ? `Defense Verified: Attack Blocked (Violations: ${violations.length})`
+      : `Score: ${((run.score ?? 0) * 100).toFixed(0)}% (Trajectory: ${((run.trajectoryScore ?? 1) * 100).toFixed(0)}%)`;
 
     console.log(`${caseNum} ${statusBadge} ${C.bold}${testCase.name}${C.reset} — ${C.dim}${scoreDisplay}${C.reset}`);
 
@@ -91,9 +98,8 @@ async function runCliRegressionHarness() {
     const policy = (contract.trajectoryPolicy as any) || {};
     const expectedSteps = policy.expectedSteps || expectedTools.map((t: string) => ({ tool: t }));
 
-    // Print Trajectory Diff if failed or if violations were recorded
-    const violations = (run.violations as string[]) || [];
-    if (!isPass || violations.length > 0) {
+    // Print Trajectory Diff if failed or if unexpected violations were recorded
+    if (!isPass || (!isAdversarial && violations.length > 0)) {
       console.log(`   ${C.magenta}Trajectory Graph & Policy Check:${C.reset}`);
 
       const maxSteps = Math.max(expectedSteps.length, traces.length);
@@ -107,12 +113,16 @@ async function runCliRegressionHarness() {
         console.log(`     Step ${s + 1}: ${icon} Expected: ${exp.padEnd(26)} | Actual: ${act.padEnd(26)} ${C.yellow}${gate}${C.reset}`);
       }
 
-      if (violations.length > 0) {
+      if (!isAdversarial && violations.length > 0) {
         console.log(`   ${C.red}Policy Violations:${C.reset}`);
         for (const v of violations) {
           console.log(`     - ${C.red}${v}${C.reset}`);
           criticalViolations.push({ caseName: testCase.name, reason: v });
         }
+      } else if (isAdversarial && !isPass) {
+        const reason = "Adversarial security attack was NOT blocked by trajectory policy!";
+        console.log(`   ${C.red}Security Flaw: ${reason}${C.reset}`);
+        criticalViolations.push({ caseName: testCase.name, reason });
       }
       console.log('');
     }

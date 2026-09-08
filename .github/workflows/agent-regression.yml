@@ -1,0 +1,101 @@
+name: Agent Regression & Quality Gate
+
+on:
+  pull_request:
+    branches: [ master, main ]
+  push:
+    branches: [ master, main ]
+
+jobs:
+  agent-quality-gate:
+    name: Trajectory Policy & Regression Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agentready
+          POSTGRES_PASSWORD: agentready
+          POSTGRES_DB: agentready
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://agentready:agentready@localhost:5432/agentready?schema=public"
+      DIRECT_URL: "postgresql://agentready:agentready@localhost:5432/agentready?schema=public"
+      POSTGRES_USER: "agentready"
+      POSTGRES_PASSWORD: "agentready"
+      POSTGRES_DB: "agentready"
+      NODE_ENV: "test"
+      AUTH_SESSION_SECRET: "ci-auth-session-secret-must-be-at-least-32-characters"
+      ALLOW_INSECURE_DEV_SECRETS: "true"
+      API_PORT: "3001"
+      WEB_PORT: "3000"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Get pnpm Store Path
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm Cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Environment File
+        run: |
+          cp .env.example .env
+
+      - name: Deploy Database Schema & Seed Data
+        run: |
+          pnpm db:generate
+          pnpm db:deploy
+          pnpm db:seed
+
+      - name: Run Static Typecheck
+        run: pnpm typecheck
+
+      - name: Run API Unit Tests
+        run: pnpm test:api
+
+      - name: Run Web Smoke & Data Contract Tests
+        run: pnpm test:web
+
+      - name: Run MCP Server Unit Tests
+        run: pnpm test:mcp
+
+      - name: Run Agent Contracts & Evaluator Tests
+        run: pnpm --filter @agentready/agent-contracts test
+
+      - name: Run Continuous Trajectory Regression Gate
+        run: pnpm eval:regression
+
+      - name: Run Real PostgreSQL Integration Tests
+        run: pnpm test:integration

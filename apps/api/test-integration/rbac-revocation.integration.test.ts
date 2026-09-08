@@ -32,7 +32,7 @@ describe("Real PostgreSQL: Role Revocation & AuditLog Integrity Guarantees", () 
   });
 
   after(async () => {
-    if (app) await app.close().catch(() => {});
+    if (app) await app.close().catch(() => { });
     await teardownEphemeralPostgres();
   });
 
