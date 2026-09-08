@@ -142,14 +142,20 @@ export default async function HomePage() {
           isFallback={dashboardRes.isFallback || regressionRes.isFallback}
         />
 
-        <SandboxController />
+        <section className="hero" style={{ marginBottom: "20px" }}>
+          <div className="heroTag">Control Plane Overview</div>
+          <h1 className="heroTitle">Agent Governance & Compliance Telemetry</h1>
+          <p className="heroSub">
+            Continuous runtime guardrails, human authorization checkpoints, and immutable audit ledgers for autonomous AI agents.
+          </p>
+        </section>
 
-        {/* 7 Required Overview Dashboard KPI Cards */}
+        {/* 7 Required Overview Dashboard KPI Cards (Top of Dashboard) */}
         <section className="metricGrid" aria-label="Harness KPI Metrics">
           <div className="metricCard">
             <div className="metricHeader">
               <span className="metricLabel">Total Executions</span>
-              <span className="pill">Runs</span>
+              <span className="pill">ALL RUNS</span>
             </div>
             <div className="metricValue">{totalExecutions}</div>
             <div className="metricSubtext">Lifetime agent execution runs</div>
@@ -159,7 +165,7 @@ export default async function HomePage() {
             <div className="metricHeader">
               <span className="metricLabel">Success Rate</span>
               <span className={`pill ${successRate !== null && successRate >= 0.8 ? "good" : "warn"}`}>
-                {formatPercent(successRate)}
+                {successRate !== null && successRate >= 0.8 ? "OPTIMAL" : "ATTENTION"}
               </span>
             </div>
             <div className="metricValue">{formatPercent(successRate)}</div>
@@ -170,7 +176,7 @@ export default async function HomePage() {
             <div className="metricHeader">
               <span className="metricLabel">Failed Executions</span>
               <span className={`pill ${failedExecutions > 0 ? "bad" : "good"}`}>
-                {failedExecutions}
+                {failedExecutions === 0 ? "ZERO FAILS" : "ACTION REQ"}
               </span>
             </div>
             <div className="metricValue">{failedExecutions}</div>
@@ -181,7 +187,7 @@ export default async function HomePage() {
             <div className="metricHeader">
               <span className="metricLabel">Pending Approvals</span>
               <span className={`pill ${pendingApprovals > 0 ? "warn" : "good"}`}>
-                {pendingApprovals}
+                {pendingApprovals > 0 ? "IN QUEUE" : "CLEARED"}
               </span>
             </div>
             <div className="metricValue">{pendingApprovals}</div>
@@ -192,7 +198,7 @@ export default async function HomePage() {
             <div className="metricHeader">
               <span className="metricLabel">Eval Pass Rate</span>
               <span className={`pill ${evalPassRate !== null && evalPassRate >= 0.8 ? "good" : "warn"}`}>
-                {formatPercent(evalPassRate)}
+                {evalPassRate !== null && evalPassRate >= 0.8 ? "COMPLIANT" : "REGRESSED"}
               </span>
             </div>
             <div className="metricValue">{formatPercent(evalPassRate)}</div>
@@ -203,7 +209,7 @@ export default async function HomePage() {
             <div className="metricHeader">
               <span className="metricLabel">Disabled Flags</span>
               <span className={`pill ${disabledCriticalFlags > 0 ? "warn" : "good"}`}>
-                {disabledCriticalFlags}
+                {disabledCriticalFlags > 0 ? "GUARDED" : "ALL ACTIVE"}
               </span>
             </div>
             <div className="metricValue">{disabledCriticalFlags}</div>
@@ -213,12 +219,15 @@ export default async function HomePage() {
           <div className="metricCard">
             <div className="metricHeader">
               <span className="metricLabel">MCP Servers</span>
-              <span className="pill good">{registeredMcpServers}</span>
+              <span className="pill good">ONLINE</span>
             </div>
             <div className="metricValue">{registeredMcpServers}</div>
             <div className="metricSubtext">Registered gateway interfaces</div>
           </div>
         </section>
+
+        {/* Interactive Testing & Simulation Sandbox */}
+        <SandboxController />
 
         {/* Dashboard Workspace Panels */}
         <section className="workspace">

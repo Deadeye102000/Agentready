@@ -191,12 +191,50 @@ select {
   background: #fee2e2;
 }
 
-/* Metric Cards Grid (7 Cards) */
+/* Hero Section Header */
+.hero {
+  margin-bottom: 24px;
+}
+
+.heroTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.heroTitle {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
+  line-height: 1.2;
+}
+
+.heroSub {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+  max-width: 780px;
+  line-height: 1.5;
+}
+
+/* Metric Cards Grid */
 .metricGrid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .metricCard {
@@ -207,14 +245,15 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 100px;
+  min-height: 102px;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .metricCard:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.06);
 }
 
 .metricHeader {
@@ -226,10 +265,10 @@ select {
 
 .metricLabel {
   color: #64748b;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.4px;
 }
 
 .metricValue {
@@ -238,12 +277,16 @@ select {
   font-weight: 800;
   line-height: 1.1;
   margin-top: 8px;
+  letter-spacing: -0.5px;
 }
 
 .metricSubtext {
   color: #94a3b8;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Dashboard Workspace Panels */
