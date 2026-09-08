@@ -522,19 +522,23 @@ Response types are defined locally in `api.ts` rather than imported from `packag
 The repo is verified across all workspaces:
 - `pnpm typecheck` (zero TypeScript errors across all 7 workspace projects)
 - `pnpm build` (Next.js 15 production bundle + API TypeScript compilation succeed)
-- ### How many tests are there and how do they run?
+### How many tests are there and how do they run?
 
-**138 total tests** across 31 suites in three workspaces, using **Node's built-in test runner** (`node --import tsx --test`) across two tiers:
+**186 total tests** across 46 suites in four workspaces, using **Node's built-in test runner** (`node --import tsx --test`) across two tiers:
 
 ```bash
-# Tier 1: Fast In-Memory Unit Tests (128 tests, 28 suites, ~2.5s, no Docker)
-pnpm test        # all workspaces
-pnpm test:api    # API unit tests (96 tests, 19 suites)
-pnpm test:web    # Frontend smoke & contracts (29 tests, 8 suites)
-pnpm test:mcp    # MCP server unit tests (3 tests, 1 suite)
+# Tier 1: Fast In-Memory Unit & Contracts Suite (171 tests across 42 suites, ~2.7s, no Docker)
+pnpm test                                      # all workspaces
+pnpm test:api                                  # API unit tests (131 tests, 31 suites)
+pnpm --filter @agentready/agent-contracts test # Trajectory Zod Contracts & Evaluator (2 tests, 1 suite)
+pnpm test:web                                  # Frontend smoke & contracts (35 tests, 9 suites)
+pnpm test:mcp                                  # MCP server unit tests (3 tests, 1 suite)
 
-# Tier 2: Real PostgreSQL Integration Tests (10 tests, 3 suites, requires Docker)
-pnpm test:integration # Testcontainers ephemeral postgres:16-alpine
+# Headless CI/CD Trajectory Regression Runner
+pnpm eval:regression
+
+# Tier 2: Real PostgreSQL Integration Tests (15 tests, 4 suites, requires Docker)
+pnpm test:integration                          # Testcontainers ephemeral postgres:16-alpine
 ```
 
 ### What do the API unit tests cover?
@@ -558,7 +562,7 @@ pnpm test:integration # Testcontainers ephemeral postgres:16-alpine
 
 ### What are the frontend smoke tests?
 
-29 tests across 8 suites in `apps/web/test/smoke.test.ts` running without browser overhead:
+35 tests across 9 suites in `apps/web/test/smoke.test.ts` running without browser overhead:
 - Fallback dashboard data shapes (all 8 metrics ≥ 0, required fields present)
 - Approval request fallback data (correct fields, `PENDING` status, no secrets in payload)
 - `ApiResult<T>` type contract shape
@@ -566,7 +570,8 @@ pnpm test:integration # Testcontainers ephemeral postgres:16-alpine
 - Regression data shape and delta arithmetic
 - Feature flag and approval gate required fields and valid mode values
 - **Sandbox Route Production Secret Protection** (4): verifies `getApiKey()` throws in production if `SANDBOX_AGENT_API_KEY` is unset or matches dev default, allows valid custom keys in production, and defaults safely in development.
-- **Sandbox Route Schema Validation** (6): verifies HTTP 400 rejection for malformed JSON, non-object bodies, missing agentType, invalid agentType values, missing executionId on approve actions, and unsupported actions.
+- **Sandbox Route Schema Validation** (7): verifies HTTP 400 rejection for malformed JSON, non-object bodies, missing agentType, invalid agentType values, missing executionId on approve actions, unsupported actions, and 429 rate limiting.
+- **New Management & Observability UI Data Contracts** (5): verifies typed `ApiResult` handling and explicit error propagation without silent mock fallback on failure for audit logs, API keys, task contracts, and eval cases.
 
 ### What is the automated test architecture?
 
@@ -713,7 +718,7 @@ This is the most critical architectural intersection in the codebase:
 ### What is the testing philosophy in this repository?
 
 The repository implements a **dual-tier testing pyramid**:
-1. **Tier 1 — Rapid In-Memory Unit Suite (`pnpm test`, 128 tests)**:
+1. **Tier 1 — Rapid In-Memory Unit & Contracts Suite (`pnpm test`, 171 tests across 42 suites)**:
    - Covers 100% of route logic, Zod validation, state machine transitions, RBAC enforcement, eval scoring math, and sandbox controllers.
    - Built on Node's native test runner (`tsx`) and an in-memory Prisma mock store (`mockPrisma.ts`).
    - Executes in **~2-3 seconds total** without requiring Docker, background daemon services, or network calls.

@@ -74,6 +74,7 @@ model TaskContract {
   allowedTools     Json             @default("[]")
   requiredApprovals Json            @default("[]")
   evalSpec         Json             @default("{}")
+  trajectoryPolicy Json?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -83,6 +84,63 @@ model TaskContract {
 
   @@index([organizationId])
   @@index([projectId])
+}
+
+model ApiKey {
+  id             String         @id @default(cuid())
+  organizationId String
+  agentId        String?
+  name           String
+  keyHash        String         @unique
+  keyPrefix      String
+  scopes         Json           @default("[]")
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent          AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([keyHash])
+}
+
+model EvalRun {
+  id              String          @id @default(cuid())
+  organizationId  String
+  projectId       String
+  executionId     String?
+  contractId      String?
+  agentId         String?
+  evalCaseId      String?
+  name            String
+  status          String          @default("QUEUED")
+  score           Float?
+  trajectoryScore Float?
+  threshold       Float           @default(1)
+  checks          Json            @default("[]")
+  findings        Json            @default("[]")
+  violations      Json?           @default("[]")
+  failureReason   String?
+  duration        Int?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  execution       AgentExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  contract        TaskContract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  agent           AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  evalCase        EvalCase?       @relation(fields: [evalCaseId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([projectId])
+  @@index([executionId])
+  @@index([contractId])
+  @@index([agentId])
+  @@index([evalCaseId])
 }
 
 model AgentExecution {
@@ -768,3 +826,161 @@ export function matchPattern(pattern: string, action: string): boolean {
 A full case-insensitive code search for the phrase "Financial Research" was conducted across the `Agentready` repository. 
 
 No matching files, configurations, prompts, or directories containing "Financial Research" or "Financial Research Agent" were found within this codebase scope.
+
+---
+
+## 6. Trajectory Policy & Deterministic Evaluator Engine
+
+AgentReady embeds deterministic trajectory evaluation into `@agentready/agent-contracts` and `apps/api/src/modules/eval-runs/evalRunService.ts`.
+
+### A. Zod Schema Definitions (`packages/agent-contracts/src/schemas/trajectory.ts`)
+
+```typescript
+import { z } from "zod";
+
+export const TrajectoryStepSchema = z.object({
+  toolName: z.string().min(1),
+  requiredArgs: z.record(z.unknown()).optional(),
+  optional: z.boolean().default(false),
+  maxOccurrences: z.number().int().positive().default(1)
+});
+
+export const TrajectoryPolicySchema = z.object({
+  expectedSequence: z.array(TrajectoryStepSchema).min(1),
+  forbiddenTools: z.array(z.string()).default([]),
+  maxSteps: z.number().int().positive().optional(),
+  enforceStrictSequence: z.boolean().default(true)
+});
+
+export const TrajectoryEvaluationResultSchema = z.object({
+  passed: z.boolean(),
+  complianceScore: z.number().min(0).max(1),
+  violations: z.array(z.string()),
+  matchedStepsCount: z.number().int().nonnegative(),
+  totalExpectedSteps: z.number().int().positive()
+});
+
+export type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>;
+export type TrajectoryPolicy = z.infer<typeof TrajectoryPolicySchema>;
+export type TrajectoryEvaluationResult = z.infer<typeof TrajectoryEvaluationResultSchema>;
+```
+
+### B. Pure Deterministic Evaluator (`evaluateTrajectoryTraces`)
+
+The sequence matcher evaluates recorded tool call traces against the contract's policy without calling an LLM:
+
+```typescript
+export function evaluateTrajectoryTraces(
+  traces: Array<{ toolName: string; input?: unknown; status?: string }>,
+  policy: TrajectoryPolicy
+): TrajectoryEvaluationResult {
+  const violations: string[] = [];
+  const forbiddenSet = new Set(policy.forbiddenTools);
+
+  // 1. Check for forbidden tool invocations
+  for (const trace of traces) {
+    if (forbiddenSet.has(trace.toolName)) {
+      violations.push(`Forbidden tool executed: ${trace.toolName}`);
+    }
+  }
+
+  // 2. Check max steps constraint
+  if (policy.maxSteps !== undefined && traces.length > policy.maxSteps) {
+    violations.push(`Execution exceeded max steps (${traces.length} > ${policy.maxSteps})`);
+  }
+
+  // 3. Match trajectory sequence
+  let traceIdx = 0;
+  let matchedSteps = 0;
+  const nonOptionalExpected = policy.expectedSequence.filter(s => !s.optional);
+
+  for (const expected of policy.expectedSequence) {
+    if (traceIdx >= traces.length) {
+      if (!expected.optional) {
+        violations.push(`Missing required step: ${expected.toolName}`);
+      }
+      continue;
+    }
+
+    if (policy.enforceStrictSequence) {
+      const currentTrace = traces[traceIdx];
+      if (currentTrace.toolName === expected.toolName) {
+        matchedSteps++;
+        traceIdx++;
+      } else if (!expected.optional) {
+        violations.push(`Sequence violation at step ${traceIdx + 1}: expected ${expected.toolName}, got ${currentTrace.toolName}`);
+        traceIdx++;
+      }
+    }
+  }
+
+  const complianceScore = nonOptionalExpected.length > 0 
+    ? Math.max(0, Math.min(1, matchedSteps / nonOptionalExpected.length)) 
+    : 1.0;
+
+  return {
+    passed: violations.length === 0 && complianceScore === 1.0,
+    complianceScore: violations.length > 0 && complianceScore === 1.0 ? 0.0 : complianceScore,
+    violations,
+    matchedStepsCount: matchedSteps,
+    totalExpectedSteps: nonOptionalExpected.length
+  };
+}
+```
+
+### C. Backend Scoring Integration (`EvalRunService`)
+
+When scoring an evaluation run in `apps/api/src/modules/eval-runs/evalRunService.ts`:
+- If `TaskContract.trajectoryPolicy` is present:
+  $$\text{Score} = \frac{\text{statusMatch} + \text{toolsMatch} + \text{trajectoryScore}}{3}$$
+- If `trajectoryPolicy` is null, falls back cleanly to:
+  $$\text{Score} = \frac{\text{statusMatch} + \text{toolsMatch}}{2}$$
+
+---
+
+## 7. Headless CI/CD Evaluation & Regression Runner
+
+Located at `scripts/run-eval-regression.ts` and executed via:
+```bash
+pnpm eval:regression
+```
+
+### Pipeline Guarantees
+- **Zero UI Dependency**: Renders side-by-side expected vs. actual trajectory tables using native ANSI escape formatting.
+- **Delta Tracking**: Queries the prior `EvalRun` record for each case and computes score delta ($\Delta = \text{score}_{\text{current}} - \text{score}_{\text{previous}}$).
+- **Exit Code Semantics**:
+  - `0`: All evaluation cases passed, zero forbidden tools invoked, and no score regression occurred.
+  - `1`: Fails the CI pipeline immediately if any critical policy invariant is breached, forbidden tools execute, or score regresses.
+
+---
+
+## 8. PostgreSQL Immutability & Constraint Hardening
+
+Enterprise compliance (SOC 2, ISO 27001) mandates that audit records cannot be tampered with or silently dropped.
+
+### A. Raw PostgreSQL Immutability Trigger
+Applied via migration `20260906170000_audit_log_immutability_trigger`:
+```sql
+CREATE OR REPLACE FUNCTION audit_log_prevent_update_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'AuditLog records are strictly immutable. UPDATE and DELETE operations are forbidden.'
+    USING ERRCODE = '55000';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_log_prevent_update_delete_trigger
+BEFORE UPDATE OR DELETE ON "AuditLog"
+FOR EACH ROW EXECUTE FUNCTION audit_log_prevent_update_delete();
+```
+
+### B. Organization Deletion Restrict Rule
+Applied via migration `20260906172000_audit_log_restrict_org_delete`:
+```sql
+ALTER TABLE "AuditLog"
+  DROP CONSTRAINT IF EXISTS "AuditLog_organizationId_fkey",
+  ADD CONSTRAINT "AuditLog_organizationId_fkey"
+    FOREIGN KEY ("organizationId") REFERENCES "Organization"("id")
+    ON DELETE RESTRICT ON UPDATE CASCADE;
+```
+Attempts to delete an `Organization` with existing audit logs fail with PostgreSQL error `23503` (foreign key violation), preventing tenant offboarding from wiping compliance history. Deleting user or agent actors sets `actorUserId` / `actorAgentId` to `NULL` (`onDelete: SetNull`), preserving complete authorization audit trails.

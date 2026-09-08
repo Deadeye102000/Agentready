@@ -8,7 +8,7 @@ This document tracks environment, configuration, and setup issues observed in th
 
 | Issue | Category | Status | Resolution / Current Mitigation |
 | :--- | :--- | :--- | :--- |
-| **Docker is not available** | Environment | **RESOLVED** | Dual-track database strategy: local Docker (Option A) or hosted/cloud PostgreSQL (Option B, e.g. Supabase/Neon). 128 tests run 100% in-memory with zero Docker dependency. |
+| **Docker is not available** | Environment | **RESOLVED** | Dual-track database strategy: local Docker (Option A) or hosted/cloud PostgreSQL (Option B, e.g. Supabase/Neon). 171 Tier 1 unit & contract tests across 42 suites run 100% in-memory with zero Docker dependency. |
 | **PostgreSQL is not running locally** | Environment | **RESOLVED** | Configured cloud Supabase connection via `DATABASE_URL` and `DIRECT_URL`. Schema synced via `pnpm db:push` and seeded via `pnpm db:seed`. |
 | **PostgreSQL health tooling (`pg_isready`) missing** | Diagnostics | **RESOLVED** | Created native Prisma-based health check `scripts/check-db.ts` runnable via `pnpm db:health`. Eliminates dependence on native PostgreSQL binaries. |
 | **Missing Environment Variables in `.env.example`** | Configuration | **RESOLVED** | Added `NEXT_PUBLIC_AGENTREADY_API_URL`, `AGENTREADY_AUTH_TOKEN`, `AGENTREADY_API_URL`, and `SANDBOX_AGENT_API_KEY` with documentation and safe defaults. |
@@ -47,7 +47,7 @@ This document tracks environment, configuration, and setup issues observed in th
 - **Solution Applied**:
   - Established **Option B (Cloud / Hosted Postgres)** in `README.md`. Developers can provide connection strings from Supabase, Neon, or RDS in `.env` (`DATABASE_URL` with connection pooling and `DIRECT_URL` for migrations/schema push).
   - Schema is applied non-destructively using `pnpm db:push` and populated via `pnpm db:seed`.
-  - All 128 automated integration tests use an in-memory `mockPrisma` client, executing with 0 Docker or live database dependencies.
+  - All 171 Tier 1 unit and contract tests use an in-memory `mockPrisma` client, executing with 0 Docker or live database dependencies.
 
 ---
 
@@ -136,5 +136,5 @@ This document tracks environment, configuration, and setup issues observed in th
 - **Pattern**: When querying or creating records where part of a compound key can be null, use `findFirst({ where: { ... } })` followed by explicit `create` or `update` rather than `upsert`.
 
 ### 5. Mock DB Client vs Real PostgreSQL Testing
-- **Unit Tests (`pnpm test`, 128 tests)**: Run against `apps/api/test/mockPrisma.ts` using an in-memory `MockStore` for sub-second developer feedback with zero Docker requirement. Array-based query mocks do not simulate SQL constraints or concurrency.
-- **Real PostgreSQL Integration Tests (`pnpm test:integration`, 10 tests)**: Provision an isolated `postgres:16-alpine` container via Testcontainers. Validates composite unique constraints (`ApiKey.keyHash`, `IdempotencyKey [executionId, key]`, `ToolCallTrace [executionId, toolCallId]`), AuditLog retention (`SetNull` on user/agent deletion) vs cascade (`Cascade` on org deletion), real Fastify + Postgres Bearer token auth, and concurrent worker claim races. Requires Docker with no automatic fallback.
+- **Unit & Contract Tests (`pnpm test:api`, `test:web`, `test:mcp`, 171 tests across 42 suites)**: Run against `apps/api/test/mockPrisma.ts` using an in-memory `MockStore` for sub-second developer feedback with zero Docker requirement. Array-based query mocks do not simulate SQL constraints or concurrency.
+- **Real PostgreSQL Integration Tests (`pnpm test:integration`, 15 tests across 4 suites)**: Provision an isolated `postgres:16-alpine` container via Testcontainers. Validates composite unique constraints (`ApiKey.keyHash`, `IdempotencyKey [executionId, key]`, `ToolCallTrace [executionId, toolCallId]`), AuditLog retention (`SetNull` on user/agent deletion) vs cascade (`Cascade` on org deletion), real Fastify + Postgres Bearer token auth, role demotions, and concurrent worker claim races. Requires Docker with no automatic fallback.

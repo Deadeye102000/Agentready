@@ -7,7 +7,7 @@
 [![Fastify](https://img.shields.io/badge/Fastify-5.0-green.svg)](https://fastify.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.1-indigo.svg)](https://www.prisma.io/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
-[![Test Suite](https://img.shields.io/badge/Tests-178%20passing-brightgreen.svg)](#-testing--verification)
+[![Test Suite](https://img.shields.io/badge/Tests-186%20passing-brightgreen.svg)](#-testing--verification)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -55,11 +55,14 @@ As AI agents transition from passive chatbots to active software operators execu
 - Captures input/output payloads, execution latency (ms), risk scores, and status flags (`SUCCESS`, `BLOCKED`, `PENDING_APPROVAL`, `ERROR`).
 - Visual execution timeline with status badges and error summary cards (`/executions/[id]`).
 
-### 📊 Evaluation & Regression Harness
-- **Eval Cases & Suites**: Test definitions (`EvalCase`) specifying input parameters, expected tool calls, and success criteria.
-- **Deterministic Scoring Engine**: Automated scoring formula:
-  $$\text{Score} = \frac{\text{StatusMatch} + \text{ToolsMatch}}{2}$$
-- **Regression Analysis**: Delta tracking (`/api/v1/eval-runs/regression`) calculating pass rate changes, score deltas, newly failing cases, and newly passing cases across agent iterations.
+### 📊 Continuous Trajectory Evaluation & Regression Engine
+- **Trajectory Policies**: State machine sequence rules (`trajectoryPolicy`) embedded on `TaskContract` defining strictly expected execution trajectories, required steps, parameter limits, and forbidden tool calls.
+- **Pure Deterministic Evaluator (`@agentready/agent-contracts`)**: Zero-LLM sequence matcher comparing actual tool call sequences against contracts, returning compliance scores (0.0 to 1.0) and explicit violation logs.
+- **Composite Scoring Formula**:
+  $$\text{Score} = \frac{\text{StatusMatch} + \text{ToolsMatch} + \text{TrajectoryScore}}{3}$$
+  *(With backward-compatible fallback to 2-way formula when no trajectory policy is defined).*
+- **Headless CLI Regression Runner (`pnpm eval:regression`)**: Standalone CI/CD test runner with ANSI side-by-side trajectory diffing, regression delta tracking, and pipeline gate exit codes (`0` for pass, `1` for policy breach).
+- **FinTech Adversarial Test Suite**: Seeded canonical FinTech refund governance contract with 5 continuous evaluation cases testing golden paths, tool injection, trajectory bypasses, parameter tampering, and credential exfiltration.
 
 ### 🔐 Multi-Tenancy, Auth & RBAC
 - **Tenant Isolation**: Server-derived organizational context (`organizationId`). Composite query parameters prevent cross-tenant data leaks.
@@ -71,8 +74,11 @@ As AI agents transition from passive chatbots to active software operators execu
 AgentReady is designed to be called by independently-built AI agents (e.g. LangGraph-based) over its public REST API using Bearer-token machine authentication (see API Keys section). It provides the governed integration surface and observation layer for external agents, rather than bundling pre-packaged agent implementations within this repository.
 
 ### 💻 Modern Web Dashboard
-- Next.js 15 responsive UI styled with modern dark gradients and Tailwind CSS.
-- **Overview KPI Panel**: Metrics for active executions, pass rates, pending approvals, and active flags.
+- Next.js 15 responsive UI styled with modern dark gradients and clean design tokens.
+- **4 Primary Overview KPI Cards**: Real-time high-impact telemetry for *Total Executions*, *Success Rate*, *Pending Approvals* (action-required indicator), and *Eval Compliance*.
+- **System Health Ribbon**: Live status indicators for connected MCP Servers, active Approval Gates, guarded Capability Flags, and Tool Traces volume.
+- **Collapsible Interactive Sandbox (`SandboxController`)**: Embedded simulation console allowing one-click demonstrations of approval gates, rogue capability interception, and continuous regression evaluations.
+- **Two-Column Executive Workspace**: Balanced layout dividing live operations (pending approval reviews, recent executions) and continuous compliance (evaluation regression deltas, active runtime guardrails).
 - **Interactive Approval Queue (`/approval-queue`)**: Inline authorization modals with rejection note requirements.
 
 ---
@@ -296,14 +302,20 @@ erDiagram
 AgentReady implements a dual-tier testing strategy combining **fast in-memory unit tests** for rapid developer velocity and **containerized integration tests** for real PostgreSQL validation.
 
 ```bash
-# 1. Run API unit tests (125 tests, 29 suites) — no Docker needed
+# 1. Run API unit tests (131 tests, 31 suites) — no Docker needed
 pnpm test:api
 
-# Run frontend smoke tests (35 tests)
+# Run Trajectory Zod Contracts & Evaluator tests (2 tests, 1 suite)
+pnpm --filter @agentready/agent-contracts test
+
+# Run frontend smoke & data contract tests (35 tests, 9 suites)
 pnpm test:web
 
-# Run MCP server unit tests (3 tests)
+# Run MCP server unit tests (3 tests, 1 suite)
 pnpm test:mcp
+
+# Run Headless CI/CD Trajectory Regression Runner (ANSI terminal diffs & exit codes)
+pnpm eval:regression
 
 # 2. Run real PostgreSQL integration tests (15 tests, 4 suites) — requires Docker
 pnpm test:integration
@@ -315,33 +327,35 @@ pnpm typecheck
 pnpm build
 ```
 
-### Test Suite Summary (178 Total Tests, 0 Failures)
+### Test Suite Summary (186 Total Tests, 0 Failures)
 
-The test suite covers **178 total tests across 33 suites**, split into two distinct execution tiers:
+The test suite covers **186 total tests across 46 suites**, split into two distinct execution tiers:
 
-#### Tier 1: Unit Suite (163 Tests across 29 API Suites + 35 Web + 3 MCP — `pnpm test:api / test:web / test:mcp`)
-*API tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
+#### Tier 1: Unit & Contract Suite (171 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
+*API and contract tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
 
 | Test Suite | Tests | Target File | Features Covered |
 |:---|:---:|:---|:---|
 | **Auth Suite** | 5 | [`apps/api/test/auth.test.ts`](apps/api/test/auth.test.ts) | User registration, login, session validation, cookie issuance |
 | **Execution State Machine** | 6 | [`apps/api/test/execution-state-machine.test.ts`](apps/api/test/execution-state-machine.test.ts) | Valid/invalid state transitions, terminal status protection |
 | **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
-| **Feature Flags** | 5 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
+| **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
 | **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
 | **Eval Framework** | 7 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs, audit logging |
 | **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
-| **Critical E2E Flows** | 10 | [`apps/api/test/critical-flows.test.ts`](apps/api/test/critical-flows.test.ts) | End-to-end flow: Register → Contract → Execution → Trace → Approval → Eval |
-| **Tool Call Traces Endpoint** | 3 | [`apps/api/test/toolCallTraces.test.ts`](apps/api/test/toolCallTraces.test.ts) | GET `/api/v1/tool-call-traces` listing, filtering, pagination, tenant isolation |
-| **Sync Tool Call Governance** | 8 | [`apps/api/test/toolCallGovernance.test.ts`](apps/api/test/toolCallGovernance.test.ts) | Synchronous tool execution, lifecycle state transitions, approval locks |
+| **Eval Trajectory Service** | 2 | [`apps/api/test/eval-trajectory-service.test.ts`](apps/api/test/eval-trajectory-service.test.ts) | Deterministic trajectory compliance calculation, policy adherence, composite scoring fallback |
+| **Adversarial & Trajectory Evals** | 4 | [`apps/api/test/adversarial-evals.test.ts`](apps/api/test/adversarial-evals.test.ts) | FinTech Refund Governance contract, tool parameter boundary checks, forbidden tool execution blocking |
+| **Critical E2E Flows** | 11 | [`apps/api/test/critical-flows.test.ts`](apps/api/test/critical-flows.test.ts) | End-to-end flow: Register → Contract → Execution → Trace → Approval → Eval |
+| **Tool Call Traces Endpoint** | 4 | [`apps/api/test/toolCallTraces.test.ts`](apps/api/test/toolCallTraces.test.ts) | GET `/api/v1/tool-call-traces` listing, filtering, pagination, tenant isolation |
+| **Sync Tool Call Governance** | 9 | [`apps/api/test/toolCallGovernance.test.ts`](apps/api/test/toolCallGovernance.test.ts) | Synchronous tool execution, lifecycle state transitions, single-flight locks, idempotency |
 | **Background Worker** | 5 | [`apps/api/test/worker.test.ts`](apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, CONFIG_ERROR fast-fail, webhook dispatch |
-| **Idempotency Purge** | 1 | [`apps/api/test/idempotencyPurge.test.ts`](apps/api/test/idempotencyPurge.test.ts) | Expired idempotency key cleanup and audit logging |
-| **RBAC Protection** | 10 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`); machine API key rejection on admin routes |
-| **Role Revocation Regression** | 2 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Mid-session ADMIN→VIEWER demotion immediately 403s; membership removal immediately 401s — verifies role is re-read from DB on every request |
-| **RBAC Route Matrix** | 5 | [`apps/api/test/rbacMatrix.test.ts`](apps/api/test/rbacMatrix.test.ts) | Parameterized matrix: unauthenticated 401, VIEWER read-only, MEMBER ops boundary, scoped API key, machine-only boundary |
-| **API Key Scope Enforcement** | 14 | [`apps/api/test/scopes.test.ts`](apps/api/test/scopes.test.ts) | `hasScope` unit tests; route enforcement per scope; wildcard scope rejection (Human Governance Invariant) |
-| **API Keys & Machine Auth** | 4 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage, invalid scope rejection (400) |
-| **Env Validation** | 2 | [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts) | Production-mode validation: rejects unset or default `AUTH_SESSION_SECRET` |
+| **Idempotency Purge** | 3 | [`apps/api/test/idempotencyPurge.test.ts`](apps/api/test/idempotencyPurge.test.ts) | Expired idempotency key cleanup and audit logging |
+| **RBAC Protection** | 12 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`), mid-session demotion (403), membership removal (401) |
+| **RBAC Route Matrix** | 14 | [`apps/api/test/rbacMatrix.test.ts`](apps/api/test/rbacMatrix.test.ts) | Parameterized matrix: unauthenticated 401, VIEWER read-only, MEMBER ops boundary, scoped API key, machine-only boundary |
+| **API Key Scope Enforcement** | 18 | [`apps/api/test/scopes.test.ts`](apps/api/test/scopes.test.ts) | `hasScope` unit tests, route enforcement per scope, wildcard scope rejection (Human Governance Invariant) |
+| **API Keys & Machine Auth** | 7 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage, invalid scope rejection (400) |
+| **Env Validation** | 5 | [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts) | Production-mode validation: rejects unset or default `AUTH_SESSION_SECRET` |
+| **Trajectory Evaluator Engine** | 2 | [`packages/agent-contracts/test/evaluator.test.ts`](packages/agent-contracts/test/evaluator.test.ts) | Pure sequence matcher, exact step order validation, unauthorized action detection |
 | **Frontend Smoke & Contracts** | 35 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math, sandbox rate-limit (429), Zod validation |
 | **MCP Server Unit Tests** | 3 | [`apps/mcp-server/test/mcpServer.test.ts`](apps/mcp-server/test/mcpServer.test.ts) | Bearer API key auth, stdio subprocess spawn, missing credential rejection |
 
@@ -365,8 +379,11 @@ The test suite covers **178 total tests across 33 suites**, split into two disti
 - [x] **Policy Governance: Approval Gates & Hierarchical Feature Flags**
 - [x] **Awaited Synchronous Audit Logging (Immutable — `BEFORE UPDATE/DELETE` trigger + `onDelete: Restrict`)**
 - [x] **Deterministic Evaluation & Regression Delta Suite**
+- [x] **Continuous Trajectory Policy Engine & Pure Sequence Matcher (`@agentready/agent-contracts`)**
+- [x] **Adversarial & Boundary Evaluation Suite (FinTech Refund Governance benchmark)**
+- [x] **Standalone Headless CI/CD Regression Runner CLI (`pnpm eval:regression`)**
 - [x] **Model Context Protocol (MCP) Server Integration**
-- [x] **Next.js 15 Dashboard with Interactive Sandbox Controller**
+- [x] **Redesigned Executive Overview Dashboard** — Clean 4-card KPI layout, system health ribbon, collapsible simulator console
 - [x] **Role-Based Access Control (RBAC) & Bearer Machine API Keys**
 - [x] **Async Background Execution Worker**
 - [x] **Audit Log UI (`/audit-logs`)** — Filterable table, actor type filter, JSON metadata drawer, immutability badge
