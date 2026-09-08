@@ -9,8 +9,8 @@
     "start:raw": "node --env-file=../../.env dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "NODE_ENV=test node --import tsx --test test/**/*.test.ts",
-    "test:integration": "NODE_ENV=test node --import tsx --test test-integration/**/*.integration.test.ts"
+    "test": "NODE_ENV=test node --import tsx --test \"test/**/*.test.ts\"",
+    "test:integration": "NODE_ENV=test node --import tsx --test \"test-integration/**/*.integration.test.ts\""
   },
   "dependencies": {
     "@agentready/agent-contracts": "workspace:*",

@@ -79,6 +79,9 @@ jobs:
           pnpm db:deploy
           pnpm db:seed
 
+      - name: Run Continuous Trajectory Regression Gate
+        run: pnpm eval:regression
+
       - name: Run Static Typecheck
         run: pnpm typecheck
 
@@ -93,9 +96,6 @@ jobs:
 
       - name: Run Agent Contracts & Evaluator Tests
         run: pnpm --filter @agentready/agent-contracts test
-
-      - name: Run Continuous Trajectory Regression Gate
-        run: pnpm eval:regression
 
       - name: Run Real PostgreSQL Integration Tests
         run: pnpm test:integration
