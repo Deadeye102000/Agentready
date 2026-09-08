@@ -274,36 +274,38 @@ export class EvalRunService {
 
     // Check if case payload simulates execution failure
     const simulateFailure = (evalCase.input as any)?.simulateFailure === true;
+    const injectedTool = (evalCase.input as any)?.injectedTool as string | undefined;
+    const skipStep = (evalCase.input as any)?.skipStep as string | undefined;
 
     // 3. Record tool calls traces
     const recordedTools: string[] = [];
     const expectedTools = (evalCase.expectedTools as string[]) || [];
     const traces: any[] = [];
 
-    if (simulateFailure) {
+    let toolsToExecute: string[];
+    if (injectedTool) {
+      toolsToExecute = expectedTools.includes(injectedTool)
+        ? expectedTools
+        : [...expectedTools, injectedTool];
+    } else if (skipStep) {
+      toolsToExecute = expectedTools.filter((t) => t !== skipStep);
+    } else if (simulateFailure) {
+      toolsToExecute = ["unexpected_tool"];
+    } else {
+      toolsToExecute = expectedTools;
+    }
+
+    for (const tool of toolsToExecute) {
       const trace = await this.executions.recordToolCall({
         organizationId: input.organizationId,
         executionId: execution.id,
         agentId,
-        toolName: "unexpected_tool",
+        toolName: tool,
         status: "SUCCEEDED",
         input: {}
       });
-      recordedTools.push("unexpected_tool");
+      recordedTools.push(tool);
       traces.push(trace);
-    } else {
-      for (const tool of expectedTools) {
-        const trace = await this.executions.recordToolCall({
-          organizationId: input.organizationId,
-          executionId: execution.id,
-          agentId,
-          toolName: tool,
-          status: "SUCCEEDED",
-          input: {}
-        });
-        recordedTools.push(tool);
-        traces.push(trace);
-      }
     }
 
     // 4. Transition execution to terminal status
@@ -336,14 +338,24 @@ export class EvalRunService {
 
     if (rawPolicy && typeof rawPolicy === "object" && Array.isArray(rawPolicy.expectedSteps)) {
       // Map execution tool traces to TraceRecord shape
-      const traceRecords: TraceRecord[] = traces.map((t: any, index: number) => ({
-        stepIndex: t.stepIndex ?? index + 1,
-        toolName: t.toolName,
-        inputPayload: t.inputPayload ?? {},
-        outputPayload: t.outputPayload ?? {},
-        gateStatus: t.gateStatus ?? "AUTOMATIC",
-        error: t.error ?? null,
-      }));
+      const traceRecords: TraceRecord[] = traces.map((t: any, index: number) => {
+        const matchingExpected = (rawPolicy.expectedSteps as any[])?.find(
+          (s: any) => s.tool === t.toolName
+        );
+        const inferredGateStatus = t.gateStatus ?? (
+          t.approvalRequestId || (matchingExpected?.expectedGateStatus && !simulateFailure)
+            ? matchingExpected?.expectedGateStatus ?? "REQUIRE_APPROVAL"
+            : "AUTOMATIC"
+        );
+        return {
+          stepIndex: t.stepIndex ?? index + 1,
+          toolName: t.toolName,
+          inputPayload: t.inputPayload ?? t.input ?? {},
+          outputPayload: t.outputPayload ?? t.output ?? {},
+          gateStatus: inferredGateStatus,
+          error: t.error ?? null,
+        };
+      });
 
       const trajectoryResult = evaluateTrajectoryTraces(traceRecords, rawPolicy as TrajectoryPolicy);
       trajectoryScore = trajectoryResult.score;

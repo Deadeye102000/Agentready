@@ -157,6 +157,57 @@ mockPrisma.project.count = async (args: any) => {
   ).length;
 };
 
+mockPrisma.project.findFirst = async (args: any) => {
+  const where = args?.where || {};
+  return (
+    mockStore.projects.find(
+      (p) =>
+        (!where.id || p.id === where.id) &&
+        (!where.organizationId || p.organizationId === where.organizationId)
+    ) || null
+  );
+};
+
+mockPrisma.project.findUnique = mockPrisma.project.findFirst;
+
+mockPrisma.project.findMany = async (args: any) => {
+  const where = args?.where || {};
+  return mockStore.projects.filter(
+    (p) =>
+      (!where.id || p.id === where.id) &&
+      (!where.organizationId || p.organizationId === where.organizationId)
+  );
+};
+
+mockPrisma.project.create = async (args: any) => {
+  const data = args.data;
+  const project = {
+    id: data.id || "proj-" + genId(),
+    organizationId: data.organizationId,
+    name: data.name,
+    description: data.description || null,
+    status: data.status || "ACTIVE",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mockStore.projects.push(project);
+  return project;
+};
+
+mockPrisma.project.upsert = async (args: any) => {
+  const { where, create, update } = args;
+  let project = mockStore.projects.find(
+    (p) =>
+      (where.id && p.id === where.id) ||
+      (where.organizationId && p.organizationId === where.organizationId)
+  );
+  if (project) {
+    Object.assign(project, update, { updatedAt: new Date() });
+    return project;
+  }
+  return mockPrisma.project.create({ data: create });
+};
+
 mockPrisma.task.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.tasks.filter(
@@ -277,6 +328,23 @@ mockPrisma.taskContract.findFirst = async (args: any) => {
 };
 
 mockPrisma.taskContract.findUnique = mockPrisma.taskContract.findFirst;
+
+mockPrisma.taskContract.upsert = async (args: any) => {
+  const { where, create, update } = args;
+  let contract = mockStore.taskContracts.find(
+    (c) =>
+      (where.id && c.id === where.id) ||
+      (where.organizationId_name_version &&
+        c.organizationId === where.organizationId_name_version.organizationId &&
+        c.name === where.organizationId_name_version.name &&
+        c.version === where.organizationId_name_version.version)
+  );
+  if (contract) {
+    Object.assign(contract, update, { updatedAt: new Date() });
+    return contract;
+  }
+  return mockPrisma.taskContract.create({ data: create });
+};
 
 
 
@@ -804,7 +872,7 @@ mockPrisma.idempotencyKey.deleteMany = async (args: any) => {
 mockPrisma.evalCase.create = async (args: any) => {
   const data = args.data;
   const item = {
-    id: genId(),
+    id: data.id || genId(),
     organizationId: data.organizationId,
     taskContractId: data.taskContractId,
     name: data.name,
@@ -817,6 +885,16 @@ mockPrisma.evalCase.create = async (args: any) => {
   };
   mockStore.evalCases.push(item);
   return item;
+};
+
+mockPrisma.evalCase.upsert = async (args: any) => {
+  const { where, create, update } = args;
+  let c = mockStore.evalCases.find((ec) => where.id && ec.id === where.id);
+  if (c) {
+    Object.assign(c, update, { updatedAt: new Date() });
+    return c;
+  }
+  return mockPrisma.evalCase.create({ data: create });
 };
 
 mockPrisma.evalCase.findMany = async (args: any) => {
