@@ -7,7 +7,7 @@
 [![Fastify](https://img.shields.io/badge/Fastify-5.0-green.svg)](https://fastify.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.1-indigo.svg)](https://www.prisma.io/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/Tests-191%20passing-brightgreen.svg)](https://github.com/Deadeye102000/Agentready)
+[![Tests](https://img.shields.io/badge/Tests-192%20passing-brightgreen.svg)](https://github.com/Deadeye102000/Agentready)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -303,7 +303,7 @@ erDiagram
 AgentReady implements a dual-tier testing strategy combining **fast in-memory unit tests** for rapid developer velocity and **containerized integration tests** for real PostgreSQL validation.
 
 ```bash
-# 1. Run API unit tests (131 tests, 31 suites) — no Docker needed
+# 1. Run API unit tests (137 tests, 32 suites) — no Docker needed
 pnpm test:api
 
 # Run Trajectory Zod Contracts & Evaluator tests (2 tests, 1 suite)
@@ -328,11 +328,11 @@ pnpm typecheck
 pnpm build
 ```
 
-### Test Suite Summary (191 Total Tests, 0 Failures)
+### Test Suite Summary (192 Total Tests, 0 Failures)
 
-The test suite covers **191 total tests across 46 suites**, split into two distinct execution tiers:
+The test suite covers **192 total tests across 46 suites**, split into two distinct execution tiers:
 
-#### Tier 1: Unit & Contract Suite (176 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
+#### Tier 1: Unit & Contract Suite (177 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
 *API and contract tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
 
 | Test Suite | Tests | Target File | Features Covered |
@@ -342,7 +342,7 @@ The test suite covers **191 total tests across 46 suites**, split into two disti
 | **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
 | **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
 | **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
-| **Eval Framework** | 7 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite runs, audit logging |
+| **Eval Framework** | 8 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite & single case runs, 60/min rate limiting, audit logging |
 | **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
 | **Eval Trajectory Service** | 2 | [`apps/api/test/eval-trajectory-service.test.ts`](apps/api/test/eval-trajectory-service.test.ts) | Deterministic trajectory compliance calculation, policy adherence, composite scoring fallback |
 | **Adversarial & Trajectory Evals** | 4 | [`apps/api/test/adversarial-evals.test.ts`](apps/api/test/adversarial-evals.test.ts) | FinTech Refund Governance contract, tool parameter boundary checks, forbidden tool execution blocking |

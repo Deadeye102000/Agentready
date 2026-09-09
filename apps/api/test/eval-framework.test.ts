@@ -279,4 +279,16 @@ describe("Evaluation Framework Integration Tests", () => {
     const body = JSON.parse(res.body);
     assert.equal(body.error.code, "VALIDATION_ERROR");
   });
+
+  it("8. POST /eval-cases/:id/run - enforces 60/min rate limit matching eval-suites/run", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/eval-cases/case-1/run",
+      headers: { cookie: cookieA },
+    });
+    // Rate limit header x-ratelimit-limit should reflect route-specific max (60)
+    assert.equal(res.headers["x-ratelimit-limit"], "60");
+    assert.ok(res.headers["x-ratelimit-remaining"] !== undefined);
+  });
 });
+
