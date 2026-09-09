@@ -7,7 +7,7 @@
 [![Fastify](https://img.shields.io/badge/Fastify-5.0-green.svg)](https://fastify.dev/)
 [![Prisma](https://img.shields.io/badge/Prisma-6.1-indigo.svg)](https://www.prisma.io/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-purple.svg)](https://modelcontextprotocol.io/)
-[![Test Suite](https://img.shields.io/badge/Tests-186%20passing-brightgreen.svg)](#-testing--verification)
+[![Tests](https://img.shields.io/badge/Tests-191%20passing-brightgreen.svg)](https://github.com/Deadeye102000/Agentready)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -56,7 +56,7 @@ As AI agents transition from passive chatbots to active software operators execu
 - Visual execution timeline with status badges and error summary cards (`/executions/[id]`).
 
 ### 📊 Continuous Trajectory Evaluation & Regression Engine
-- **Trajectory Policies**: State machine sequence rules (`trajectoryPolicy`) embedded on `TaskContract` defining strictly expected execution trajectories, required steps, parameter limits, and forbidden tool calls.
+- **Trajectory Policies**: State machine sequence rules (`trajectoryPolicy`) embedded on `TaskContract` defining strictly expected execution trajectories, required steps, parameter limits, and forbidden tool calls. Fully configurable over HTTP via `POST /api/v1/task-contracts` and `PATCH /api/v1/task-contracts/:id` by Owner/Admin, or initialized via seed routines.
 - **Pure Deterministic Evaluator (`@agentready/agent-contracts`)**: Zero-LLM sequence matcher comparing actual tool call sequences against contracts, returning compliance scores (0.0 to 1.0) and explicit violation logs.
 - **Composite Scoring Formula**:
   $$\text{Score} = \frac{\text{StatusMatch} + \text{ToolsMatch} + \text{TrajectoryScore}}{3}$$
@@ -125,7 +125,7 @@ Agentready/
 
 > [!IMPORTANT]
 > **Human Governance Invariant (No Machine Self-Governance)**:
-> Administrative and policy-defining routes (`POST /task-contracts`, `PUT /feature-flags`, `PUT /approval-gates`, `POST /api-keys`, etc.) require human interactive session authentication (`OWNER` or `ADMIN` role). Machine API keys—even those possessing wildcard (`*`, `all`, `admin`) scopes—are **strictly rejected with 403 Forbidden** on administrative routes to guarantee that autonomous agents cannot tamper with or bypass the governance boundaries, feature flags, and approval gates that constrain them. Conversely, machine execution callbacks (`POST /tool-calls/:traceId/result`) require machine Bearer authentication and reject human sessions.
+> Administrative and policy-defining routes (`POST /task-contracts`, `PATCH /task-contracts/:id`, `PUT /feature-flags`, `PUT /approval-gates`, `POST /api-keys`, etc.) require human interactive session authentication (`OWNER` or `ADMIN` role). Machine API keys—even those possessing wildcard (`*`, `all`, `admin`) scopes—are **strictly rejected with 403 Forbidden** on administrative routes to guarantee that autonomous agents cannot tamper with or bypass the governance boundaries, feature flags, and approval gates that constrain them. Conversely, machine execution callbacks (`POST /tool-calls/:traceId/result`) require machine Bearer authentication and reject human sessions.
 
 | Category | Method | Endpoint Path | Description | Access |
 |:---|:---:|:---|:---|:---|
@@ -142,7 +142,8 @@ Agentready/
 | **Tool Traces**| `GET` | `/api/v1/tool-call-traces` | List tool call traces for an execution (with pagination) | Session / Agent (`traces:read` or `executions:read`) |
 | **Tool Traces**| `POST` | `/api/v1/tool-call-traces` | Record per-step tool trace event | Session (Member+) / Agent (`traces:write`) |
 | **Tool Traces**| `PATCH` | `/api/v1/tool-call-traces/:id` | Update per-step tool trace | Session (Member+) / Agent (`traces:write`) |
-| **Contracts**  | `POST` | `/api/v1/task-contracts` | Create new agent task contract | Session (Owner/Admin) only, API keys not permitted |
+| **Contracts**  | `POST` | `/api/v1/task-contracts` | Create new agent task contract & trajectory policy | Session (Owner/Admin) only, API keys not permitted |
+| **Contracts**  | `PATCH`| `/api/v1/task-contracts/:id` | Update task contract & trajectory policy | Session (Owner/Admin) only, API keys not permitted |
 | **Contracts**  | `GET` | `/api/v1/task-contracts` | List task contracts | Session / Agent (`contracts:read`) |
 | **Contracts**  | `GET` | `/api/v1/task-contracts/:id` | Get task contract by ID | Session / Agent (`contracts:read`) |
 | **Governance** | `GET` | `/api/v1/approval-gates` | List policy approval gates | Session / Agent (`governance:read`) |
@@ -327,11 +328,11 @@ pnpm typecheck
 pnpm build
 ```
 
-### Test Suite Summary (186 Total Tests, 0 Failures)
+### Test Suite Summary (191 Total Tests, 0 Failures)
 
-The test suite covers **186 total tests across 46 suites**, split into two distinct execution tiers:
+The test suite covers **191 total tests across 46 suites**, split into two distinct execution tiers:
 
-#### Tier 1: Unit & Contract Suite (171 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
+#### Tier 1: Unit & Contract Suite (176 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
 *API and contract tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
 
 | Test Suite | Tests | Target File | Features Covered |
@@ -351,7 +352,7 @@ The test suite covers **186 total tests across 46 suites**, split into two disti
 | **Background Worker** | 5 | [`apps/api/test/worker.test.ts`](apps/api/test/worker.test.ts) | Atomic DB claim polling, concurrency isolation, CONFIG_ERROR fast-fail, webhook dispatch |
 | **Idempotency Purge** | 3 | [`apps/api/test/idempotencyPurge.test.ts`](apps/api/test/idempotencyPurge.test.ts) | Expired idempotency key cleanup and audit logging |
 | **RBAC Protection** | 12 | [`apps/api/test/rbac.test.ts`](apps/api/test/rbac.test.ts) | Endpoint role gating (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`, `APPROVER`), mid-session demotion (403), membership removal (401) |
-| **RBAC Route Matrix** | 14 | [`apps/api/test/rbacMatrix.test.ts`](apps/api/test/rbacMatrix.test.ts) | Parameterized matrix: unauthenticated 401, VIEWER read-only, MEMBER ops boundary, scoped API key, machine-only boundary |
+| **RBAC Route Matrix** | 19 | [`apps/api/test/rbacMatrix.test.ts`](apps/api/test/rbacMatrix.test.ts) | Parameterized matrix: unauthenticated 401, VIEWER read-only, MEMBER ops boundary, PATCH task-contract trajectory policy mutation, scoped API key, machine-only boundary |
 | **API Key Scope Enforcement** | 18 | [`apps/api/test/scopes.test.ts`](apps/api/test/scopes.test.ts) | `hasScope` unit tests, route enforcement per scope, wildcard scope rejection (Human Governance Invariant) |
 | **API Keys & Machine Auth** | 7 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage, invalid scope rejection (400) |
 | **Env Validation** | 5 | [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts) | Production-mode validation: rejects unset or default `AUTH_SESSION_SECRET` |
@@ -376,7 +377,7 @@ Every pull request against `master` and `main` is gated by the **Agent Regressio
 - **Ephemeral PostgreSQL 16 Service Container**: Spun up on port 5432 with health checks, schema migrations (`pnpm db:deploy`), and seed contracts (`pnpm db:seed`).
 - **Required Quality Checks**:
   1. `pnpm typecheck` (zero TypeScript compilation errors across all workspace packages)
-  2. `pnpm test:api` (131 API unit tests, RBAC matrices, and state machine transitions)
+  2. `pnpm test:api` (136 API unit tests, RBAC matrices, and state machine transitions)
   3. `pnpm test:web` (35 Next.js smoke & data contract tests)
   4. `pnpm test:mcp` (3 MCP server unit tests)
   5. `pnpm --filter @agentready/agent-contracts test` (2 Trajectory evaluator tests)

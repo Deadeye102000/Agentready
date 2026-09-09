@@ -222,6 +222,18 @@ describe("Comprehensive Route Authorization Matrix (RBAC, Scopes & Machine Auth)
       payload: { projectId: "proj-1", agentId: "agent-1", name: "Matrix Contract 2", objective: "Obj" }
     },
     {
+      name: "PATCH /api/v1/task-contracts/:id",
+      method: "PATCH" as const,
+      url: "/api/v1/task-contracts/contract-1",
+      payload: {
+        trajectoryPolicy: {
+          mode: "STRICT_SEQUENCE",
+          expectedSteps: [{ tool: "db_query", required: true }],
+          forbiddenTools: ["delete_table"]
+        }
+      }
+    },
+    {
       name: "PUT /api/v1/feature-flags",
       method: "PUT" as const,
       url: "/api/v1/feature-flags",
@@ -495,6 +507,147 @@ describe("Comprehensive Route Authorization Matrix (RBAC, Scopes & Machine Auth)
         payload: { status: "SUCCEEDED", output: { result: "ok" } }
       });
       assert.equal(res.statusCode, 200);
+    });
+  });
+
+  describe("7. Task Contract Trajectory Policy Mutation & Persistence", () => {
+    it("denies VIEWER and MEMBER sessions with 403 on PATCH /task-contracts/:id", async () => {
+      for (const role of ["VIEWER", "MEMBER"]) {
+        const cookie = getSessionCookie(role);
+        const res = await app.inject({
+          method: "PATCH",
+          url: "/api/v1/task-contracts/contract-1",
+          headers: { cookie },
+          payload: {
+            trajectoryPolicy: {
+              mode: "STRICT_SEQUENCE",
+              expectedSteps: [{ tool: "db_query", required: true }]
+            }
+          }
+        });
+        assert.equal(res.statusCode, 403, `Role ${role} must get 403 on PATCH /task-contracts/:id`);
+        const body = JSON.parse(res.body);
+        assert.equal(body.error.code, "FORBIDDEN");
+      }
+    });
+
+    it("denies machine API key with wildcard scopes with 403 on PATCH /task-contracts/:id", async () => {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/task-contracts/contract-1",
+        headers: { authorization: `Bearer ${rawKeyAdmin}` },
+        payload: {
+          trajectoryPolicy: {
+            mode: "STRICT_SEQUENCE",
+            expectedSteps: [{ tool: "db_query", required: true }]
+          }
+        }
+      });
+      assert.equal(res.statusCode, 403, "API keys must get 403 on PATCH /task-contracts/:id per Human Governance Invariant");
+      const body = JSON.parse(res.body);
+      assert.equal(body.error.code, "FORBIDDEN");
+    });
+
+    it("allows OWNER/ADMIN session to create a task contract with trajectoryPolicy over HTTP (POST)", async () => {
+      const cookie = getSessionCookie("OWNER");
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/task-contracts",
+        headers: { cookie },
+        payload: {
+          projectId: "proj-1",
+          agentId: "agent-1",
+          name: "Contract With Trajectory",
+          objective: "Strict sequence policy",
+          trajectoryPolicy: {
+            mode: "STRICT_SEQUENCE",
+            expectedSteps: [
+              { tool: "auth_step", required: true },
+              { tool: "db_query", required: true }
+            ],
+            forbiddenTools: ["drop_db"]
+          }
+        }
+      });
+      assert.equal(res.statusCode, 201);
+      const created = JSON.parse(res.body);
+      assert.ok(created.id);
+      assert.equal(created.name, "Contract With Trajectory");
+      assert.deepEqual(created.trajectoryPolicy, {
+        mode: "STRICT_SEQUENCE",
+        expectedSteps: [
+          { tool: "auth_step", required: true },
+          { tool: "db_query", required: true }
+        ],
+        forbiddenTools: ["drop_db"]
+      });
+    });
+
+    it("allows OWNER/ADMIN session to update trajectoryPolicy over HTTP (PATCH) and persists it", async () => {
+      const cookie = getSessionCookie("ADMIN");
+      const patchRes = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/task-contracts/contract-1",
+        headers: { cookie },
+        payload: {
+          trajectoryPolicy: {
+            mode: "SUBSEQUENCE",
+            expectedSteps: [
+              { tool: "db_query", required: true },
+              { tool: "send_receipt", required: true, expectedGateStatus: "REQUIRE_APPROVAL" }
+            ],
+            forbiddenTools: ["delete_customer_record"],
+            maxToolCalls: 5
+          }
+        }
+      });
+      assert.equal(patchRes.statusCode, 200);
+      const updated = JSON.parse(patchRes.body);
+      assert.deepEqual(updated.trajectoryPolicy, {
+        mode: "SUBSEQUENCE",
+        expectedSteps: [
+          { tool: "db_query", required: true },
+          { tool: "send_receipt", required: true, expectedGateStatus: "REQUIRE_APPROVAL" }
+        ],
+        forbiddenTools: ["delete_customer_record"],
+        maxToolCalls: 5
+      });
+
+      // Verify persistence via GET /api/v1/task-contracts/:id
+      const getRes = await app.inject({
+        method: "GET",
+        url: "/api/v1/task-contracts/contract-1",
+        headers: { cookie }
+      });
+      assert.equal(getRes.statusCode, 200);
+      const fetched = JSON.parse(getRes.body);
+      assert.deepEqual(fetched.trajectoryPolicy, {
+        mode: "SUBSEQUENCE",
+        expectedSteps: [
+          { tool: "db_query", required: true },
+          { tool: "send_receipt", required: true, expectedGateStatus: "REQUIRE_APPROVAL" }
+        ],
+        forbiddenTools: ["delete_customer_record"],
+        maxToolCalls: 5
+      });
+    });
+
+    it("rejects invalid trajectoryPolicy payload with 400 Bad Request", async () => {
+      const cookie = getSessionCookie("OWNER");
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/task-contracts/contract-1",
+        headers: { cookie },
+        payload: {
+          trajectoryPolicy: {
+            mode: "INVALID_MODE",
+            expectedSteps: []
+          }
+        }
+      });
+      assert.equal(res.statusCode, 400);
+      const body = JSON.parse(res.body);
+      assert.equal(body.error.code, "VALIDATION_ERROR");
     });
   });
 });

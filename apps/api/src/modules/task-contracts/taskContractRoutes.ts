@@ -12,6 +12,7 @@ import { HttpError } from "../../lib/httpError.js";
 import { validateBody } from "../../lib/validate.js";
 import {
   createTaskContractBodySchema,
+  patchTaskContractBodySchema,
   taskContractListQuerySchema,
   taskContractParamsSchema
 } from "./taskContractSchemas.js";
@@ -42,6 +43,21 @@ export async function registerTaskContractRoutes(app: FastifyInstance) {
       actorUserId: context.userId
     });
     return reply.code(201).send(contract);
+  });
+
+  app.patch("/task-contracts/:id", {
+    preHandler: [requireRole(["OWNER", "ADMIN"])]
+  }, async (request, reply) => {
+    const context = requireOrgContext(request);
+    const params = taskContractParamsSchema.parse(request.params);
+    const body = validateBody(patchTaskContractBodySchema, request.body);
+    const updated = await service.update({
+      organizationId: context.organizationId,
+      id: params.id,
+      actorUserId: context.userId,
+      data: body
+    });
+    return reply.code(200).send(updated);
   });
 
   app.get("/task-contracts/:id", {

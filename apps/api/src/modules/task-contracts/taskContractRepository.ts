@@ -36,4 +36,18 @@ export class TaskContractRepository {
       }
     });
   }
+
+  update(input: {
+    organizationId: string;
+    id: string;
+    data: Prisma.TaskContractUpdateInput;
+  }) {
+    return this.prisma.taskContract.update({
+      where: {
+        id: input.id,
+        organizationId: input.organizationId
+      },
+      data: input.data
+    });
+  }
 }

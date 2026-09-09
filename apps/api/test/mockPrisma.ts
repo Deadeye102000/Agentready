@@ -346,6 +346,20 @@ mockPrisma.taskContract.upsert = async (args: any) => {
   return mockPrisma.taskContract.create({ data: create });
 };
 
+mockPrisma.taskContract.update = async (args: any) => {
+  const { where, data } = args;
+  const contract = mockStore.taskContracts.find(
+    (c) =>
+      (!where.id || c.id === where.id) &&
+      (!where.organizationId || c.organizationId === where.organizationId)
+  );
+  if (!contract) {
+    throw new Error("Record to update not found in mockStore.");
+  }
+  Object.assign(contract, data, { updatedAt: new Date() });
+  return contract;
+};
+
 
 
 

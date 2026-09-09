@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TrajectoryPolicySchema } from "./schemas/trajectory.js";
 
 export const taskContractSchema = z.object({
   organizationId: z.string().min(1),
@@ -12,7 +13,8 @@ export const taskContractSchema = z.object({
   successCriteria: z.array(z.string().min(1)).default([]),
   allowedTools: z.array(z.string().min(1)).default([]),
   requiredApprovals: z.array(z.string().min(1)).default([]),
-  evalSpec: z.record(z.unknown()).default({})
+  evalSpec: z.record(z.unknown()).default({}),
+  trajectoryPolicy: TrajectoryPolicySchema.optional()
 });
 
 export const taskContractEvaluationSchema = z.object({
