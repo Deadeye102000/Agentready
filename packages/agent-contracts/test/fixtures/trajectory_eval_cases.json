@@ -1,0 +1,455 @@
+[
+  {
+    "id": "strict-all-match",
+    "description": "STRICT_SEQUENCE: all required steps matched in order",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "read_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0},
+      {"tool_name": "read_file",  "step_index": 1}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 2,
+      "total_expected": 2,
+      "violations": []
+    }
+  },
+  {
+    "id": "strict-missing-required",
+    "description": "STRICT_SEQUENCE: second required step missing",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "read_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.5,
+      "matched_steps": 1,
+      "total_expected": 2,
+      "violations": ["Missing expected step [1]: tool \"read_file\""]
+    }
+  },
+  {
+    "id": "strict-wrong-order",
+    "description": "STRICT_SEQUENCE: steps appear in wrong order — second is counted missing",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "read_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "read_file",  "step_index": 0},
+      {"tool_name": "search_web", "step_index": 1}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.5,
+      "matched_steps": 1,
+      "total_expected": 2,
+      "violations": ["Missing expected step [0]: tool \"search_web\""]
+    }
+  },
+  {
+    "id": "subsequence-interleaved",
+    "description": "SUBSEQUENCE: required steps present with interleaved extras",
+    "policy": {
+      "mode": "SUBSEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "write_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0},
+      {"tool_name": "read_file",  "step_index": 1},
+      {"tool_name": "write_file", "step_index": 2}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 2,
+      "total_expected": 2,
+      "violations": []
+    }
+  },
+  {
+    "id": "subsequence-out-of-order",
+    "description": "SUBSEQUENCE: second required step appears before first — second missed",
+    "policy": {
+      "mode": "SUBSEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "write_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "write_file", "step_index": 0},
+      {"tool_name": "search_web", "step_index": 1}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.5,
+      "matched_steps": 1,
+      "total_expected": 2,
+      "violations": ["Missing expected step [1]: tool \"write_file\""]
+    }
+  },
+  {
+    "id": "unordered-all-present",
+    "description": "UNORDERED: all required tools present in any order",
+    "policy": {
+      "mode": "UNORDERED",
+      "expected_steps": [
+        {"tool": "write_file"},
+        {"tool": "search_web"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0},
+      {"tool_name": "write_file", "step_index": 1}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 2,
+      "total_expected": 2,
+      "violations": []
+    }
+  },
+  {
+    "id": "unordered-one-missing",
+    "description": "UNORDERED: one required tool not present in traces",
+    "policy": {
+      "mode": "UNORDERED",
+      "expected_steps": [
+        {"tool": "write_file"},
+        {"tool": "search_web"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.5,
+      "matched_steps": 1,
+      "total_expected": 2,
+      "violations": ["Missing expected step [0]: tool \"write_file\""]
+    }
+  },
+  {
+    "id": "forbidden-tool-executed",
+    "description": "Forbidden tool appears in traces — violation added",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [{"tool": "search_web"}],
+      "forbidden_tools": ["rm_rf"],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0},
+      {"tool_name": "rm_rf",      "step_index": 1}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 1.0,
+      "matched_steps": 1,
+      "total_expected": 1,
+      "violations": ["Forbidden tool executed: \"rm_rf\" at step 1"]
+    }
+  },
+  {
+    "id": "forbidden-tool-absent",
+    "description": "Forbidden tool NOT in traces — no violation",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [{"tool": "search_web"}],
+      "forbidden_tools": ["rm_rf"],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 1,
+      "total_expected": 1,
+      "violations": []
+    }
+  },
+  {
+    "id": "max-tool-calls-at-limit",
+    "description": "Exactly at the max_tool_calls limit — no violation",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [],
+      "forbidden_tools": [],
+      "max_tool_calls": 3
+    },
+    "traces": [
+      {"tool_name": "a", "step_index": 0},
+      {"tool_name": "b", "step_index": 1},
+      {"tool_name": "c", "step_index": 2}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 0,
+      "total_expected": 0,
+      "violations": []
+    }
+  },
+  {
+    "id": "max-tool-calls-exceeded",
+    "description": "Exceeds max_tool_calls — violation added",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [],
+      "forbidden_tools": [],
+      "max_tool_calls": 2
+    },
+    "traces": [
+      {"tool_name": "a", "step_index": 0},
+      {"tool_name": "b", "step_index": 1},
+      {"tool_name": "c", "step_index": 2}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 1.0,
+      "matched_steps": 0,
+      "total_expected": 0,
+      "violations": ["Max tool calls exceeded: executed 3, limit 2"]
+    }
+  },
+  {
+    "id": "optional-step-absent-no-violation",
+    "description": "Optional step absent — no violation, score based on required only",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "log_result", "required": false}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 1,
+      "total_expected": 1,
+      "violations": []
+    }
+  },
+  {
+    "id": "optional-step-present-counts-score",
+    "description": "Optional step present — matched_steps includes it, score computed over required count",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "log_result", "required": false}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0},
+      {"tool_name": "log_result",  "step_index": 1}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 2,
+      "total_expected": 1,
+      "violations": []
+    }
+  },
+  {
+    "id": "gate-status-mismatch",
+    "description": "expectedGateStatus does not match trace.gate_status — step not matched",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "risky_tool", "expected_gate_status": "APPROVED"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "risky_tool", "step_index": 0, "gate_status": "PENDING"}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.0,
+      "matched_steps": 0,
+      "total_expected": 1,
+      "violations": ["Missing expected step [0]: tool \"risky_tool\""]
+    }
+  },
+  {
+    "id": "gate-status-match",
+    "description": "expectedGateStatus matches trace.gate_status — step matched",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "risky_tool", "expected_gate_status": "APPROVED"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "risky_tool", "step_index": 0, "gate_status": "APPROVED"}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 1,
+      "total_expected": 1,
+      "violations": []
+    }
+  },
+  {
+    "id": "expected-args-match",
+    "description": "expectedArgs key present with correct value — step matched",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web", "expected_args": {"query": "hello world"}}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0, "input_payload": {"query": "hello world", "limit": 10}}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 1,
+      "total_expected": 1,
+      "violations": []
+    }
+  },
+  {
+    "id": "expected-args-wrong-value",
+    "description": "expectedArgs key present with wrong value — step not matched",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web", "expected_args": {"query": "hello world"}}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0, "input_payload": {"query": "goodbye"}}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.0,
+      "matched_steps": 0,
+      "total_expected": 1,
+      "violations": ["Missing expected step [0]: tool \"search_web\""]
+    }
+  },
+  {
+    "id": "expected-args-key-absent",
+    "description": "expectedArgs key absent from trace input_payload — step not matched",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web", "expected_args": {"query": "hello world"}}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "search_web", "step_index": 0, "input_payload": {"limit": 5}}
+    ],
+    "expected": {
+      "passed": false,
+      "score": 0.0,
+      "matched_steps": 0,
+      "total_expected": 1,
+      "violations": ["Missing expected step [0]: tool \"search_web\""]
+    }
+  },
+  {
+    "id": "empty-traces-nonempty-policy",
+    "description": "No traces, required steps expected — all missing",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [
+        {"tool": "search_web"},
+        {"tool": "write_file"}
+      ],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [],
+    "expected": {
+      "passed": false,
+      "score": 0.0,
+      "matched_steps": 0,
+      "total_expected": 2,
+      "violations": [
+        "Missing expected step [0]: tool \"search_web\"",
+        "Missing expected step [1]: tool \"write_file\""
+      ]
+    }
+  },
+  {
+    "id": "empty-policy-nonempty-traces",
+    "description": "No expected steps and no forbidden tools — always passes",
+    "policy": {
+      "mode": "STRICT_SEQUENCE",
+      "expected_steps": [],
+      "forbidden_tools": [],
+      "max_tool_calls": null
+    },
+    "traces": [
+      {"tool_name": "anything", "step_index": 0}
+    ],
+    "expected": {
+      "passed": true,
+      "score": 1.0,
+      "matched_steps": 0,
+      "total_expected": 0,
+      "violations": []
+    }
+  }
+]
