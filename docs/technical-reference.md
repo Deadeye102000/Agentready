@@ -838,31 +838,33 @@ AgentReady embeds deterministic trajectory evaluation into `@agentready/agent-co
 ```typescript
 import { z } from "zod";
 
-export const TrajectoryStepSchema = z.object({
-  toolName: z.string().min(1),
-  requiredArgs: z.record(z.unknown()).optional(),
-  optional: z.boolean().default(false),
-  maxOccurrences: z.number().int().positive().default(1)
+```typescript
+export const TrajectoryModeEnum = z.enum(['STRICT_SEQUENCE', 'SUBSEQUENCE', 'UNORDERED']);
+export type TrajectoryMode = z.infer<typeof TrajectoryModeEnum>;
+
+export const ExpectedStepSchema = z.object({
+  tool: z.string().min(1),
+  required: z.boolean().default(true),
+  expectedArgs: z.record(z.unknown()).optional(),
+  expectedGateStatus: z.enum(['AUTOMATIC', 'REQUIRE_APPROVAL', 'BLOCKED']).optional(),
 });
+export type ExpectedStep = z.infer<typeof ExpectedStepSchema>;
 
 export const TrajectoryPolicySchema = z.object({
-  expectedSequence: z.array(TrajectoryStepSchema).min(1),
+  mode: TrajectoryModeEnum.default('SUBSEQUENCE'),
+  expectedSteps: z.array(ExpectedStepSchema).min(1),
   forbiddenTools: z.array(z.string()).default([]),
-  maxSteps: z.number().int().positive().optional(),
-  enforceStrictSequence: z.boolean().default(true)
+  maxToolCalls: z.number().int().positive().optional(),
 });
-
-export const TrajectoryEvaluationResultSchema = z.object({
-  passed: z.boolean(),
-  complianceScore: z.number().min(0).max(1),
-  violations: z.array(z.string()),
-  matchedStepsCount: z.number().int().nonnegative(),
-  totalExpectedSteps: z.number().int().positive()
-});
-
-export type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>;
 export type TrajectoryPolicy = z.infer<typeof TrajectoryPolicySchema>;
-export type TrajectoryEvaluationResult = z.infer<typeof TrajectoryEvaluationResultSchema>;
+
+export interface TrajectoryEvaluation {
+  passed: boolean;
+  score: number; // 0.0 to 1.0
+  matchedSteps: number;
+  totalExpected: number;
+  violations: string[];
+}
 ```
 
 ### B. Pure Deterministic Evaluator (`evaluateTrajectoryTraces`)
@@ -871,59 +873,71 @@ The sequence matcher evaluates recorded tool call traces against the contract's 
 
 ```typescript
 export function evaluateTrajectoryTraces(
-  traces: Array<{ toolName: string; input?: unknown; status?: string }>,
-  policy: TrajectoryPolicy
-): TrajectoryEvaluationResult {
+  traces: (TraceRecord | Record<string, any>)[],
+  policy: TrajectoryPolicy | Record<string, any>
+): TrajectoryEvaluation {
   const violations: string[] = [];
-  const forbiddenSet = new Set(policy.forbiddenTools);
+  const mode = policy.mode;
+  const expectedSteps: any[] = (policy as any).expectedSteps ?? (policy as any).expected_steps ?? [];
+  const forbiddenTools: string[] = (policy as any).forbiddenTools ?? (policy as any).forbidden_tools ?? [];
+  const maxToolCalls: number | undefined = (policy as any).maxToolCalls ?? (policy as any).max_tool_calls;
 
-  // 1. Check for forbidden tool invocations
+  if (maxToolCalls && traces.length > maxToolCalls) {
+    violations.push(`Max tool calls exceeded: executed ${traces.length}, limit ${maxToolCalls}`);
+  }
+
   for (const trace of traces) {
-    if (forbiddenSet.has(trace.toolName)) {
-      violations.push(`Forbidden tool executed: ${trace.toolName}`);
+    const toolName = (trace as any).toolName ?? (trace as any).tool_name;
+    const stepIndex = (trace as any).stepIndex ?? (trace as any).step_index ?? "unknown";
+    if (forbiddenTools.includes(toolName)) {
+      violations.push(`Forbidden tool executed: "${toolName}" at step ${stepIndex}`);
     }
   }
 
-  // 2. Check max steps constraint
-  if (policy.maxSteps !== undefined && traces.length > policy.maxSteps) {
-    violations.push(`Execution exceeded max steps (${traces.length} > ${policy.maxSteps})`);
-  }
-
-  // 3. Match trajectory sequence
-  let traceIdx = 0;
   let matchedSteps = 0;
-  const nonOptionalExpected = policy.expectedSequence.filter(s => !s.optional);
+  let traceIdx = 0;
 
-  for (const expected of policy.expectedSequence) {
-    if (traceIdx >= traces.length) {
-      if (!expected.optional) {
-        violations.push(`Missing required step: ${expected.toolName}`);
+  for (let i = 0; i < expectedSteps.length; i++) {
+    const expected = expectedSteps[i];
+    let stepMatched = false;
+
+    if (mode === "STRICT_SEQUENCE") {
+      const trace = traces[traceIdx];
+      if (trace && matchStep(trace, expected)) {
+        stepMatched = true;
+        traceIdx++;
       }
-      continue;
+    } else if (mode === "SUBSEQUENCE") {
+      while (traceIdx < traces.length) {
+        if (matchStep(traces[traceIdx], expected)) {
+          stepMatched = true;
+          traceIdx++;
+          break;
+        }
+        traceIdx++;
+      }
+    } else if (mode === "UNORDERED") {
+      const found = traces.some((trace) => matchStep(trace, expected));
+      if (found) stepMatched = true;
     }
 
-    if (policy.enforceStrictSequence) {
-      const currentTrace = traces[traceIdx];
-      if (currentTrace.toolName === expected.toolName) {
-        matchedSteps++;
-        traceIdx++;
-      } else if (!expected.optional) {
-        violations.push(`Sequence violation at step ${traceIdx + 1}: expected ${expected.toolName}, got ${currentTrace.toolName}`);
-        traceIdx++;
-      }
+    if (stepMatched) {
+      matchedSteps++;
+    } else if (expected.required !== false) {
+      violations.push(`Required trajectory step missing: tool "${expected.tool}"`);
     }
   }
 
-  const complianceScore = nonOptionalExpected.length > 0 
-    ? Math.max(0, Math.min(1, matchedSteps / nonOptionalExpected.length)) 
-    : 1.0;
+  const requiredSteps = expectedSteps.filter((s) => s.required !== false);
+  const totalCount = requiredSteps.length > 0 ? requiredSteps.length : expectedSteps.length;
+  const score = totalCount > 0 ? Number((matchedSteps / totalCount).toFixed(4)) : 1.0;
 
   return {
-    passed: violations.length === 0 && complianceScore === 1.0,
-    complianceScore: violations.length > 0 && complianceScore === 1.0 ? 0.0 : complianceScore,
+    passed: violations.length === 0,
+    score: Math.min(score, 1.0),
+    matchedSteps,
+    totalExpected: totalCount,
     violations,
-    matchedStepsCount: matchedSteps,
-    totalExpectedSteps: nonOptionalExpected.length
   };
 }
 ```

@@ -43,10 +43,22 @@ pnpm --filter @agentready/mcp-server dev
    pnpm --filter @agentready/mcp-server build
    ```
 
-2. Run the compiled JavaScript:
+2. Run the compiled JavaScript (Stdio transport):
    ```bash
    node dist/index.js
    ```
+
+### Running as HTTP Server-Sent Events (SSE) Gateway
+
+To expose the MCP gateway over network HTTP/SSE:
+
+```bash
+node dist/index.js --transport=sse --port=3002
+```
+
+- Endpoint: `GET http://localhost:3002/sse` (Requires `Authorization: Bearer <api_key>`)
+- Tool message dispatch: `POST http://localhost:3002/message`
+- Browser session token endpoint: `POST http://localhost:3002/sse/session`
 
 ## Integration with MCP Clients (e.g. Claude Desktop)
 

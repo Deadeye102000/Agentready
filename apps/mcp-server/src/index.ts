@@ -1,11 +1,14 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import http from "node:http";
+import crypto from "node:crypto";
 
 export interface McpServerConfig {
   apiUrl?: string;
@@ -334,12 +337,396 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 export const server = createMcpServer();
 
-// Start the server using Stdio transport
-export async function runServer(transport?: any) {
-  const actualTransport = transport ?? new StdioServerTransport();
-  await server.connect(actualTransport);
-  console.error("AgentReady MCP Server running on stdio");
-  return server;
+export interface McpSseServerOptions extends McpServerConfig {
+  port?: number;
+  host?: string;
+  maxConcurrentConnectionsPerKey?: number; // default 5
+  maxHandshakesPerMinute?: number; // default 30
+  sessionTokenTtlMs?: number; // default 30_000 (30s)
+}
+
+interface SseSessionToken {
+  keyId: string;
+  createdAt: number;
+  expiresAt: number;
+  used: boolean;
+}
+
+interface ActiveSseSession {
+  transport: SSEServerTransport;
+  rateLimitKey: string;
+  authenticatedKey: string;
+}
+
+export function createSseHttpServer(options: McpSseServerOptions = {}): http.Server {
+  const getExpectedApiKey = () =>
+    options.apiKey || process.env.AGENTREADY_API_KEY || process.env.AGENTREADY_AUTH_TOKEN;
+
+  const maxConcurrent = options.maxConcurrentConnectionsPerKey ?? 5;
+  const maxHandshakes = options.maxHandshakesPerMinute ?? 30;
+  const sessionTokenTtl = options.sessionTokenTtlMs ?? 30_000;
+
+  const sessionTokens = new Map<string, SseSessionToken>();
+  const activeConnections = new Map<string, number>();
+  const handshakeTimestamps = new Map<string, number[]>();
+  const activeTransports = new Map<string, ActiveSseSession>();
+
+  // Periodically clean up expired session tokens
+  const cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [token, data] of sessionTokens.entries()) {
+      if (now > data.expiresAt || data.used) {
+        sessionTokens.delete(token);
+      }
+    }
+  }, 10_000);
+  cleanupInterval.unref();
+
+  const corsHeaders: Record<string, string> = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, mcp-protocol-version, x-api-key",
+  };
+
+  const httpServer = http.createServer(async (req, res) => {
+    try {
+      const parsedUrl = new URL(req.url || "/", "http://localhost");
+      const pathname = parsedUrl.pathname;
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, corsHeaders);
+        res.end();
+        return;
+      }
+
+      // 1. Health check endpoint
+      if (req.method === "GET" && pathname === "/health") {
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        });
+        res.end(JSON.stringify({ status: "ok", transport: "sse" }));
+        return;
+      }
+
+      // 2. Mint single-use SSE session token endpoint
+      if (req.method === "POST" && pathname === "/sse/session") {
+        const authHeader = req.headers["authorization"] || (req.headers["x-api-key"] as string);
+        const bearerToken = authHeader?.startsWith("Bearer ")
+          ? authHeader.slice(7).trim()
+          : authHeader;
+
+        const expectedKey = getExpectedApiKey();
+        if (expectedKey && bearerToken !== expectedKey) {
+          res.writeHead(401, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "Unauthorized: Invalid or missing API key" }));
+          return;
+        }
+
+        const sessionToken = "sse_sess_" + crypto.randomBytes(24).toString("hex");
+        const now = Date.now();
+        const expiresAt = now + sessionTokenTtl;
+
+        sessionTokens.set(sessionToken, {
+          keyId: bearerToken || "anonymous",
+          createdAt: now,
+          expiresAt,
+          used: false,
+        });
+
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        });
+        res.end(
+          JSON.stringify({
+            sessionToken,
+            expiresAt: new Date(expiresAt).toISOString(),
+          })
+        );
+        return;
+      }
+
+      // 3. SSE Stream Connection Endpoint
+      if (req.method === "GET" && pathname === "/sse") {
+        // Query-string fallback for api_key is strictly prohibited
+        if (parsedUrl.searchParams.has("api_key")) {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error:
+                "Long-lived API keys in query parameters are strictly forbidden. Use 'Authorization: Bearer <token>' header or mint a single-use session token via POST /sse/session.",
+            })
+          );
+          return;
+        }
+
+        // Authenticate via Authorization header or single-use session token
+        let authenticatedKey: string | null = null;
+        const authHeader = req.headers["authorization"] || (req.headers["x-api-key"] as string);
+        const bearerToken = authHeader?.startsWith("Bearer ")
+          ? authHeader.slice(7).trim()
+          : authHeader;
+
+        const expectedKey = getExpectedApiKey();
+
+        if (bearerToken) {
+          if (expectedKey && bearerToken !== expectedKey) {
+            res.writeHead(401, {
+              "Content-Type": "application/json",
+              ...corsHeaders,
+            });
+            res.end(JSON.stringify({ error: "Unauthorized: Invalid API key" }));
+            return;
+          }
+          authenticatedKey = bearerToken;
+        } else {
+          const sessionTokenParam = parsedUrl.searchParams.get("session_token");
+          if (sessionTokenParam) {
+            const sessionData = sessionTokens.get(sessionTokenParam);
+            const now = Date.now();
+            if (!sessionData || sessionData.used || now > sessionData.expiresAt) {
+              res.writeHead(401, {
+                "Content-Type": "application/json",
+                ...corsHeaders,
+              });
+              res.end(JSON.stringify({ error: "Invalid or expired session token" }));
+              return;
+            }
+
+            // Consume single-use token immediately
+            sessionData.used = true;
+            sessionTokens.delete(sessionTokenParam);
+            authenticatedKey = sessionData.keyId;
+          }
+        }
+
+        if (!authenticatedKey && expectedKey) {
+          res.writeHead(401, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error:
+                "Unauthorized: Missing Authorization header or valid single-use session token",
+            })
+          );
+          return;
+        }
+
+        const clientIp =
+          (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+          req.socket.remoteAddress ||
+          "127.0.0.1";
+        const rateLimitKey = authenticatedKey || clientIp;
+
+        // Rate Limit 1: Concurrent connections
+        const currentConns = activeConnections.get(rateLimitKey) || 0;
+        if (currentConns >= maxConcurrent) {
+          res.writeHead(429, {
+            "Content-Type": "application/json",
+            "Retry-After": "5",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error: `Too many concurrent SSE connections. Maximum ${maxConcurrent} allowed.`,
+            })
+          );
+          return;
+        }
+
+        // Rate Limit 2: Handshakes per minute
+        const now = Date.now();
+        const windowStart = now - 60_000;
+        const recentHandshakes = (handshakeTimestamps.get(rateLimitKey) || []).filter(
+          (t) => t > windowStart
+        );
+        if (recentHandshakes.length >= maxHandshakes) {
+          res.writeHead(429, {
+            "Content-Type": "application/json",
+            "Retry-After": "60",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error: `Rate limit exceeded. Maximum ${maxHandshakes} handshakes per minute.`,
+            })
+          );
+          return;
+        }
+        recentHandshakes.push(now);
+        handshakeTimestamps.set(rateLimitKey, recentHandshakes);
+
+        // Track active connection
+        activeConnections.set(rateLimitKey, currentConns + 1);
+
+        const transport = new SSEServerTransport("/message", res);
+        const sessionId = transport.sessionId;
+
+        activeTransports.set(sessionId, {
+          transport,
+          rateLimitKey,
+          authenticatedKey: authenticatedKey || "anonymous",
+        });
+
+        let cleanedUp = false;
+        const cleanup = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
+          activeTransports.delete(sessionId);
+          const current = activeConnections.get(rateLimitKey) || 1;
+          if (current <= 1) {
+            activeConnections.delete(rateLimitKey);
+          } else {
+            activeConnections.set(rateLimitKey, current - 1);
+          }
+        };
+
+        res.on("close", cleanup);
+        transport.onclose = cleanup;
+
+        const clientServer = createMcpServer({
+          apiUrl: options.apiUrl,
+          apiKey: authenticatedKey || options.apiKey,
+        });
+
+        await clientServer.connect(transport);
+        return;
+      }
+
+      // 4. JSON-RPC Message Endpoint
+      if (req.method === "POST" && pathname === "/message") {
+        // Query-string fallback for api_key is strictly prohibited
+        if (parsedUrl.searchParams.has("api_key")) {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error:
+                "Long-lived API keys in query parameters are strictly forbidden. Use Authorization header.",
+            })
+          );
+          return;
+        }
+
+        const sessionId = parsedUrl.searchParams.get("sessionId");
+        if (!sessionId) {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "Missing sessionId query parameter" }));
+          return;
+        }
+
+        const sessionRecord = activeTransports.get(sessionId);
+        if (!sessionRecord) {
+          res.writeHead(404, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "Session not found or connection terminated" }));
+          return;
+        }
+
+        // Require Authorization header on POST /message
+        const authHeader = req.headers["authorization"] || (req.headers["x-api-key"] as string);
+        const bearerToken = authHeader?.startsWith("Bearer ")
+          ? authHeader.slice(7).trim()
+          : authHeader;
+
+        const expectedKey = getExpectedApiKey();
+        if (expectedKey) {
+          if (!bearerToken || (bearerToken !== expectedKey && bearerToken !== sessionRecord.authenticatedKey)) {
+            res.writeHead(401, {
+              "Content-Type": "application/json",
+              ...corsHeaders,
+            });
+            res.end(
+              JSON.stringify({
+                error: "Unauthorized: Invalid or missing Authorization header on /message",
+              })
+            );
+            return;
+          }
+        }
+
+        await sessionRecord.transport.handlePostMessage(req, res);
+        return;
+      }
+
+      // 404 for unknown endpoints
+      res.writeHead(404, {
+        "Content-Type": "application/json",
+        ...corsHeaders,
+      });
+      res.end(JSON.stringify({ error: "Not Found" }));
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.writeHead(500, {
+          "Content-Type": "application/json",
+          ...corsHeaders,
+        });
+        res.end(JSON.stringify({ error: err.message || "Internal Server Error" }));
+      }
+    }
+  });
+
+  return httpServer;
+}
+
+// Start the server using Stdio or SSE transport
+export async function runServer(options?: McpSseServerOptions & { transport?: "stdio" | "sse" }) {
+  const args = process.argv.slice(2);
+  const transportArg = args.find((a) => a.startsWith("--transport="))?.split("=")[1];
+  const portArg = args.find((a) => a.startsWith("--port="))?.split("=")[1];
+  const hostArg = args.find((a) => a.startsWith("--host="))?.split("=")[1];
+
+  const chosenTransport =
+    options?.transport ||
+    transportArg ||
+    (process.env.MCP_TRANSPORT === "sse" ? "sse" : "stdio");
+
+  if (chosenTransport === "sse") {
+    const port =
+      options?.port ||
+      (portArg ? parseInt(portArg, 10) : undefined) ||
+      (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : 3002);
+    const host = options?.host || hostArg || process.env.MCP_HOST || "0.0.0.0";
+
+    const sseHttpServer = createSseHttpServer({
+      ...options,
+      port,
+      host,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      sseHttpServer.listen(port, host, () => {
+        console.error(
+          `AgentReady MCP Server running on SSE transport at http://${host}:${port}`
+        );
+        resolve();
+      });
+      sseHttpServer.on("error", reject);
+    });
+
+    return sseHttpServer;
+  } else {
+    const actualTransport = new StdioServerTransport();
+    await server.connect(actualTransport);
+    console.error("AgentReady MCP Server running on stdio");
+    return server;
+  }
 }
 
 const isDirectExecution = () => {
@@ -359,3 +746,4 @@ if (isDirectExecution()) {
     process.exit(1);
   });
 }
+

@@ -815,6 +815,22 @@ export async function revokeApiKey(
 
 // ─── Task Contracts ───────────────────────────────────────────────────────────
 
+export type TrajectoryMode = "STRICT_SEQUENCE" | "SUBSEQUENCE" | "UNORDERED";
+
+export type ExpectedStep = {
+  tool: string;
+  required?: boolean;
+  expectedArgs?: Record<string, unknown>;
+  expectedGateStatus?: "AUTOMATIC" | "REQUIRE_APPROVAL" | "BLOCKED";
+};
+
+export type TrajectoryPolicy = {
+  mode?: TrajectoryMode;
+  expectedSteps: ExpectedStep[];
+  forbiddenTools?: string[];
+  maxToolCalls?: number;
+};
+
 export type TaskContractItem = {
   id: string;
   organizationId: string;
@@ -826,6 +842,7 @@ export type TaskContractItem = {
   riskThreshold: number;
   inputSchema: any;
   outputSchema: any;
+  trajectoryPolicy?: TrajectoryPolicy | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -873,12 +890,38 @@ export async function createTaskContract(
     riskThreshold?: number;
     inputSchema?: any;
     outputSchema?: any;
+    trajectoryPolicy?: TrajectoryPolicy;
   }
 ): Promise<{ data: TaskContractItem | null; error: string | null }> {
   const base = getClientApiBaseUrl();
   try {
     const res = await fetch(`${base}/api/v1/task-contracts`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { data: null, error: (body as any)?.error?.message || (body as any)?.message || `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as TaskContractItem;
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message || "Network error" };
+  }
+}
+
+export async function patchTaskContract(
+  id: string,
+  input: {
+    trajectoryPolicy?: TrajectoryPolicy;
+  }
+): Promise<{ data: TaskContractItem | null; error: string | null }> {
+  const base = getClientApiBaseUrl();
+  try {
+    const res = await fetch(`${base}/api/v1/task-contracts/${encodeURIComponent(id)}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
       credentials: "include",

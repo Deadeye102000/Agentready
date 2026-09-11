@@ -29,7 +29,12 @@ export function Navbar({ orgName }: { orgName?: string }) {
             <span className="brandBadge">AI Agent Governance</span>
           </div>
         </div>
-        <div className="orgBadge">{orgName ?? "No Organization"}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Link href="/landing" className="navShowcaseBtn" title="View Public Showcase & Architecture Tour">
+            ✦ Product Tour
+          </Link>
+          <div className="orgBadge">{orgName ?? "No Organization"}</div>
+        </div>
       </div>
       <nav className="navBarList">
         {navItems.map((item) => {

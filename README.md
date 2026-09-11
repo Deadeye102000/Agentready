@@ -73,8 +73,10 @@ As AI agents transition from passive chatbots to active software operators execu
 ### 🔌 External Agent Integration
 AgentReady is designed to be called by independently-built AI agents (e.g. LangGraph-based) over its public REST API using Bearer-token machine authentication (see API Keys section). It provides the governed integration surface and observation layer for external agents, rather than bundling pre-packaged agent implementations within this repository.
 
-### 💻 Modern Web Dashboard
+### 💻 Modern Web Dashboard & Public Showcase
 - Next.js 15 responsive UI styled with modern dark gradients and clean design tokens.
+- **Enterprise Public Showcase & Landing Page (`/landing`)**: Dark obsidian cybernetic design educating stakeholders on the modern AI agent threat surface (*Unsafe Multi-Agent Delegation*, *Over-Privileged Tool Execution*, *Prompt Injection Trajectory Drift*, *Black-Box Handoffs*), interactive code/policy/trace console tabs, ecosystem compatibility grid, and real-time performance metrics (< 4ms pre-flight check latency, 0-LLM deterministic scoring).
+- **Authentication-Aware Dynamic Routing**: Unauthenticated visitors accessing the root `/` URL are seamlessly served the public product landing page without requiring a backend session; authenticated operators automatically enter the full operational dashboard.
 - **4 Primary Overview KPI Cards**: Real-time high-impact telemetry for *Total Executions*, *Success Rate*, *Pending Approvals* (action-required indicator), and *Eval Compliance*.
 - **System Health Ribbon**: Live status indicators for connected MCP Servers, active Approval Gates, guarded Capability Flags, and Tool Traces volume.
 - **Collapsible Interactive Sandbox (`SandboxController`)**: Embedded simulation console allowing one-click demonstrations of approval gates, rogue capability interception, and continuous regression evaluations.
@@ -328,12 +330,12 @@ pnpm typecheck
 pnpm build
 ```
 
-### Test Suite Summary (192 Total Tests, 0 Failures)
+### Test Suite Summary (224 Total Tests, 0 Failures)
 
-The test suite covers **192 total tests across 46 suites**, split into two distinct execution tiers:
+The test suite covers **224 total tests across 50 suites**, split into two distinct execution tiers:
 
-#### Tier 1: Unit & Contract Suite (177 Tests across 42 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
-*API and contract tests run in ~2.7 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
+#### Tier 1: Unit & Contract Suite (209 Tests across 46 Suites — `pnpm test:api / test:web / test:mcp / --filter @agentready/agent-contracts test`)
+*API and contract tests run in ~2.8 seconds using Node's native test runner and an in-memory Prisma mock store (`mockPrisma.ts`). Requires zero Docker or database dependencies.*
 
 | Test Suite | Tests | Target File | Features Covered |
 |:---|:---:|:---|:---|
@@ -342,6 +344,7 @@ The test suite covers **192 total tests across 46 suites**, split into two disti
 | **Tenancy Isolation** | 3 | [`apps/api/test/tenancy.test.ts`](apps/api/test/tenancy.test.ts) | Cross-org boundary checks, 404 existence privacy masks |
 | **Feature Flags** | 6 | [`apps/api/test/feature-flags.test.ts`](apps/api/test/feature-flags.test.ts) | Flag overrides, state toggles, audit logs, auto-approval override |
 | **Approval Gates** | 9 | [`apps/api/test/approval-gates.test.ts`](apps/api/test/approval-gates.test.ts) | Policy pattern matching, risk thresholds, approval suspension |
+| **Approval Webhooks** | 3 | [`apps/api/test/approvalWebhook.test.ts`](apps/api/test/approvalWebhook.test.ts) | Deduplicated dispatch, HMAC-SHA256 signature verification, exponential retry exhaustion audit log |
 | **Eval Framework** | 8 | [`apps/api/test/eval-framework.test.ts`](apps/api/test/eval-framework.test.ts) | Test case definition, scoring formula, suite & single case runs, 60/min rate limiting, audit logging |
 | **Eval Regression** | 1 | [`apps/api/test/regression.test.ts`](apps/api/test/regression.test.ts) | Delta calculation, newly failing/passing metric comparisons |
 | **Eval Trajectory Service** | 2 | [`apps/api/test/eval-trajectory-service.test.ts`](apps/api/test/eval-trajectory-service.test.ts) | Deterministic trajectory compliance calculation, policy adherence, composite scoring fallback |
@@ -356,9 +359,10 @@ The test suite covers **192 total tests across 46 suites**, split into two disti
 | **API Key Scope Enforcement** | 18 | [`apps/api/test/scopes.test.ts`](apps/api/test/scopes.test.ts) | `hasScope` unit tests, route enforcement per scope, wildcard scope rejection (Human Governance Invariant) |
 | **API Keys & Machine Auth** | 7 | [`apps/api/test/api-keys.test.ts`](apps/api/test/api-keys.test.ts) | Key generation, Bearer header token resolution, hash storage, invalid scope rejection (400) |
 | **Env Validation** | 5 | [`apps/api/test/env.test.ts`](apps/api/test/env.test.ts) | Production-mode validation: rejects unset or default `AUTH_SESSION_SECRET` |
-| **Trajectory Evaluator Engine** | 2 | [`packages/agent-contracts/test/evaluator.test.ts`](packages/agent-contracts/test/evaluator.test.ts) | Pure sequence matcher, exact step order validation, unauthorized action detection |
-| **Frontend Smoke & Contracts** | 35 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math, sandbox rate-limit (429), Zod validation |
-| **MCP Server Unit Tests** | 3 | [`apps/mcp-server/test/mcpServer.test.ts`](apps/mcp-server/test/mcpServer.test.ts) | Bearer API key auth, stdio subprocess spawn, missing credential rejection |
+| **Trajectory Evaluator Engine** | 22 | [`packages/agent-contracts/test/evaluator.test.ts`](packages/agent-contracts/test/evaluator.test.ts) | Pure sequence matcher, exact step order, 20 shared cross-language fixtures (`STRICT_SEQUENCE`, `SUBSEQUENCE`, `UNORDERED`) |
+| **Frontend Smoke & Contracts** | 36 | [`apps/web/test/smoke.test.ts`](apps/web/test/smoke.test.ts) | Data contract validation, state enums, fallback math, sandbox rate-limit (429), `patchTaskContract` API |
+| **MCP Server Stdio Tests** | 3 | [`apps/mcp-server/test/mcpServer.test.ts`](apps/mcp-server/test/mcpServer.test.ts) | Bearer API key auth, stdio subprocess spawn, missing credential rejection |
+| **MCP Server SSE Transport Tests** | 8 | [`apps/mcp-server/test/sseTransport.test.ts`](apps/mcp-server/test/sseTransport.test.ts) | Query-string key rejection (400), header auth, single-use session tokens (30s TTL), rate limiting (429), E2E tool calls |
 
 #### Tier 2: Real PostgreSQL Integration Suite (15 Tests across 4 Suites — `pnpm test:integration`)
 *Runs against an ephemeral `postgres:16-alpine` instance provisioned by Testcontainers (`@testcontainers/postgresql`). Applies all migrations from empty on every run. **Docker is a hard requirement with no automatic fallback**.*
@@ -377,13 +381,128 @@ Every pull request against `master` and `main` is gated by the **Agent Regressio
 - **Ephemeral PostgreSQL 16 Service Container**: Spun up on port 5432 with health checks, schema migrations (`pnpm db:deploy`), and seed contracts (`pnpm db:seed`).
 - **Required Quality Checks**:
   1. `pnpm typecheck` (zero TypeScript compilation errors across all workspace packages)
-  2. `pnpm test:api` (136 API unit tests, RBAC matrices, and state machine transitions)
-  3. `pnpm test:web` (35 Next.js smoke & data contract tests)
-  4. `pnpm test:mcp` (3 MCP server unit tests)
-  5. `pnpm --filter @agentready/agent-contracts test` (2 Trajectory evaluator tests)
+  2. `pnpm test:api` (140 API unit tests, RBAC matrices, approval webhooks, and state machine transitions)
+  3. `pnpm test:web` (36 Next.js smoke & data contract tests)
+  4. `pnpm test:mcp` (11 MCP server unit & SSE transport tests)
+  5. `pnpm --filter @agentready/agent-contracts test` (22 Trajectory evaluator tests & cross-language fixtures)
   6. `pnpm eval:regression` (**Continuous Trajectory Regression Gate** — exits with non-zero code if any trajectory policy violation, forbidden tool call, or score regression is detected)
   7. `pnpm test:integration` (15 real PostgreSQL integration tests against Testcontainers)
 - **Deployment Invariant**: Any trajectory violation or test failure fails the GitHub Actions check and blocks PR merge.
+
+---
+
+## 🔔 Real-time Approval Webhooks & HMAC Verification Recipe
+
+AgentReady emits real-time HTTP webhooks whenever human approval requests are created or reviewed.
+
+### Invariants & Architecture
+1. **Single-Point Insert Dedup**: Exactly one webhook is dispatched per `ApprovalRequest` record created, directly triggered within `governanceRepository.createApprovalRequest()`. High-level callers (`recordToolCall`, `checkToolCall`, `createApprovalRequest`) cannot cause duplicate notifications.
+2. **Reliable Retry Schedule**: Deliveries are retried up to 3 times (total 4 attempts) with exponential backoff (`1s`, `2s`, `4s`). Webhook execution runs asynchronously in the background so slow or failing webhook targets never block or fail the synchronous execution path.
+3. **Audit Log Failure Exhaustion**: If all 4 delivery attempts fail, an immutable PostgreSQL `AuditLog` row is created with action `approval.webhook_delivery_failed`, recording the target URL, attempt count, request ID, and the final error message.
+
+### Exact HMAC-SHA256 Signing Recipe
+
+Each webhook request includes cryptographic headers allowing receivers to verify payload integrity, authenticity, and protect against replay attacks:
+
+| Header | Format | Description |
+|:---|:---|:---|
+| `x-agentready-signature` | `sha256=<hex_digest>` | HMAC-SHA256 hex digest over `${timestamp}.${rawJsonBody}` |
+| `x-agentready-timestamp` | `<epoch_seconds>` | UTC timestamp integer (seconds since Unix epoch) |
+| `x-agentready-event-id` | `<uuid>` | Unique delivery event identifier |
+| `Content-Type` | `application/json` | JSON payload MIME type |
+
+#### Receiver Verification Recipe (TypeScript / Node.js)
+```typescript
+import crypto from "node:crypto";
+
+export function verifyAgentReadyWebhook(
+  rawBody: string,
+  headers: Record<string, string | string[] | undefined>,
+  secret: string,
+  toleranceSeconds = 300 // 5 minutes replay protection
+): boolean {
+  const signatureHeader = headers["x-agentready-signature"] as string;
+  const timestampHeader = headers["x-agentready-timestamp"] as string;
+
+  if (!signatureHeader || !timestampHeader) return false;
+
+  const timestamp = parseInt(timestampHeader, 10);
+  if (isNaN(timestamp)) return false;
+
+  // 1. Replay attack prevention: reject timestamps older than tolerance
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestamp) > toleranceSeconds) {
+    return false;
+  }
+
+  // 2. Compute expected HMAC-SHA256 signature
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+
+  // 3. Extract received signature digest
+  const prefix = "sha256=";
+  if (!signatureHeader.startsWith(prefix)) return false;
+  const receivedSig = signatureHeader.slice(prefix.length);
+
+  // 4. Timing-safe comparison to protect against side-channel attacks
+  if (expectedSig.length !== receivedSig.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(receivedSig));
+}
+```
+
+#### Receiver Verification Recipe (Python)
+```python
+import hmac
+import hashlib
+import time
+
+def verify_agentready_webhook(raw_body: bytes, headers: dict, secret: str, tolerance_seconds: int = 300) -> bool:
+    sig_header = headers.get("x-agentready-signature")
+    timestamp_header = headers.get("x-agentready-timestamp")
+    if not sig_header or not timestamp_header:
+        return False
+    
+    try:
+        timestamp = int(timestamp_header)
+    except ValueError:
+        return False
+
+    if abs(time.time() - timestamp) > tolerance_seconds:
+        return False  # Replay detected
+
+    payload_to_sign = f"{timestamp}.".encode("utf-8") + raw_body
+    expected_sig = hmac.new(secret.encode("utf-8"), payload_to_sign, hashlib.sha256).hexdigest()
+    
+    prefix = "sha256="
+    if not sig_header.startswith(prefix):
+        return False
+    received_sig = sig_header[len(prefix):]
+    
+    return hmac.compare_digest(expected_sig, received_sig)
+```
+
+---
+
+## 🔌 Model Context Protocol (MCP) Server & SSE Transport
+
+The AgentReady MCP Server exposes tool governance capabilities and context inspection over two standard transports:
+
+1. **Stdio Transport**: Subprocess communication for local IDE extensions (Claude Desktop, Cursor, VS Code):
+   ```bash
+   pnpm --filter @agentready/mcp-server dev
+   ```
+2. **Server-Sent Events (SSE) HTTP Transport**: Distributed HTTP/SSE server for network clients:
+   ```bash
+   node apps/mcp-server/dist/index.js --transport=sse --port=3002
+   ```
+
+### Security & Rate-Limiting Discipline for SSE
+- **Header-Only Authentication**: Authorization is required via `Authorization: Bearer <api_key>` on both `GET /sse` and `POST /message`. Long-lived API keys in query parameters (`?api_key=...`) are strictly forbidden and immediately rejected with **400 Bad Request** to prevent credential leakage in HTTP access logs.
+- **Single-Use Session Tokens for Browser Clients**: For browser `EventSource` clients unable to set custom request headers, a short-lived single-use session token can be minted via `POST /sse/session` (with `Authorization: Bearer <key>`), returning `{ sessionToken, expiresAt }` (30-second TTL). The client connects via `GET /sse?session_token=<token>`, which is immediately consumed and invalidated upon connection handshake.
+- **Connection-Count Rate Limiting**: Max **5 concurrent active SSE connections** per client key/IP (returns `429 Too Many Requests` with `Retry-After: 5`).
+- **Handshake Frequency Rate Limiting**: Max **30 handshakes per minute** per client key/IP (returns `429 Too Many Requests` with `Retry-After: 60`).
 
 ---
 
@@ -404,11 +523,12 @@ Every pull request against `master` and `main` is gated by the **Agent Regressio
 - [x] **Async Background Execution Worker**
 - [x] **Audit Log UI (`/audit-logs`)** — Filterable table, actor type filter, JSON metadata drawer, immutability badge
 - [x] **API Key Management UI (`/api-keys`)** — Granular scope picker (wildcard scopes blocked per Human Governance Invariant), secret reveal on creation
-- [x] **Task Contract UI (`/task-contracts`)** — Contract cards, JSON spec inspector, creation modal
+- [x] **Task Contract UI (`/task-contracts`)** — Contract cards, JSON spec inspector, Trajectory Policy viewer, interactive modal editor, creation modal
 - [x] **Eval Suite UI (`/evals`)** — Regression KPIs, tabbed test cases / runs, live run trigger
+- [x] **Real-time Webhook Notifications**: Push alerts for pending `ApprovalRequest` events with HMAC-SHA256 signatures, single-insert dedup, backoff retries, and audit-logged exhaustion.
+- [x] **HTTP / SSE Transport for MCP Gateway**: Distributed Server-Sent Events transport with header auth, single-use session tokens, and connection rate limiting.
+- [x] **Public Landing Page & Threat Showcase (`/landing`)**: High-impact cybernetic showcase with interactive policy-as-code console and authentication-aware routing.
 - [ ] **Typed API Response Contracts**: Shared response types across frontend & backend via `@agentready/shared`.
-- [ ] **Real-time Webhook Notifications**: Push alerts for pending `ApprovalRequest` events to Slack, Teams, or custom webhooks.
-- [ ] **HTTP / SSE Transport for MCP Gateway**: Extend MCP server from stdio transport to distributed HTTP/SSE endpoints.
 - [ ] **Password Reset & Team Invite Workflows**: Email token-based credential recovery and team onboarding flows.
 - [ ] **Custom LLM Judge Scoring**: Integrate non-deterministic LLM-as-a-judge scoring for complex agent evaluation criteria.
 - [ ] **Audited Org Archival API**: Superuser/service-role endpoint that exports `AuditLog` records to external immutable storage prior to deletion and writes a dedicated, untamperable record of the archival event (required before tenant offboarding/org deletion can be safely permitted).

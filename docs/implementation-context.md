@@ -95,12 +95,12 @@ graph TD
 
 ### G. Continuous Trajectory Evaluation & Deterministic Evaluator Engine
 - **Trajectory Policies**: Encoded in `TaskContract.trajectoryPolicy` defining valid execution paths:
-  - `expectedSequence`: Array of ordered tool steps with exact tool names, required arguments, and optional flags.
-  - `forbiddenTools`: Explicit blacklist of tools forbidden from ever executing under this contract.
-  - `maxSteps`: Maximum allowable tool calls before failing execution.
-  - `enforceStrictSequence`: Boolean flag requiring steps to match exact order without deviation.
+  - `mode`: Trajectory matching mode (`STRICT_SEQUENCE`, `SUBSEQUENCE`, or `UNORDERED`).
+  - `expectedSteps`: Array of step objects (`tool`, `required`, `expectedArgs`, `expectedGateStatus`).
+  - `forbiddenTools`: Explicit list of tools forbidden from ever executing under this contract.
+  - `maxToolCalls`: Maximum allowable tool calls before failing execution.
 - **Pure Deterministic Evaluator (`@agentready/agent-contracts`)**: Zero-LLM evaluator function `evaluateTrajectoryTraces` that evaluates recorded `ToolCallTrace` records against `trajectoryPolicy`. Returns:
-  - `complianceScore`: Float between `0.0` and `1.0`.
+  - `score`: Float between `0.0` and `1.0`.
   - `violations`: String array detailing missing steps, out-of-order execution, forbidden tool attempts, or parameter violations.
 - **Composite Scoring Formula**:
   $$\text{Score} = \frac{\text{StatusMatch} + \text{ToolsMatch} + \text{TrajectoryScore}}{3}$$

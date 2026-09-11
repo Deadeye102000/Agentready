@@ -1,7 +1,15 @@
 import type { ApprovalStatus, Prisma, PrismaClient } from "@agentready/db";
+import { ApprovalWebhookService } from "./approvalWebhookService.js";
 
 export class GovernanceRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly webhookService: ApprovalWebhookService;
+
+  constructor(
+    private readonly prisma: PrismaClient,
+    webhookService?: ApprovalWebhookService
+  ) {
+    this.webhookService = webhookService ?? new ApprovalWebhookService(prisma);
+  }
 
   listApprovalGates(input: { organizationId: string }) {
     return this.prisma.approvalGate.findMany({
@@ -118,8 +126,10 @@ export class GovernanceRepository {
     });
   }
 
-  createApprovalRequest(input: Prisma.ApprovalRequestUncheckedCreateInput & { organizationId: string }) {
-    return this.prisma.approvalRequest.create({ data: input });
+  async createApprovalRequest(input: Prisma.ApprovalRequestUncheckedCreateInput & { organizationId: string }) {
+    const row = await this.prisma.approvalRequest.create({ data: input });
+    this.webhookService.dispatch("approval.created", row);
+    return row;
   }
 
   listApprovalRequests(input: { organizationId: string; status?: ApprovalStatus }) {

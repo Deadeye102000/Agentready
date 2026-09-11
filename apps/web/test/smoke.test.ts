@@ -537,6 +537,29 @@ describe("New Management & Observability UI Data Contracts", () => {
       process.env.AGENTREADY_API_URL = originalEnv;
     }
   });
+
+  it("patchTaskContract is defined and returns error on connection failure", async () => {
+    const { patchTaskContract } = await import("../src/lib/api.js");
+    assert.equal(typeof patchTaskContract, "function");
+
+    const originalEnv = process.env.NEXT_PUBLIC_API_URL;
+    process.env.NEXT_PUBLIC_API_URL = "http://127.0.0.1:1";
+    try {
+      const result = await patchTaskContract("contract-1", {
+        trajectoryPolicy: {
+          mode: "STRICT_SEQUENCE",
+          expectedSteps: [{ tool: "get_transaction", required: true }],
+          forbiddenTools: ["delete_account"],
+          maxToolCalls: 4
+        }
+      });
+      assert.equal(result.data, null);
+      assert.ok(result.error);
+    } finally {
+      process.env.NEXT_PUBLIC_API_URL = originalEnv;
+    }
+  });
 });
+
 
 

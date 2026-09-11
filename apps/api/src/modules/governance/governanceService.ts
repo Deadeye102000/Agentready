@@ -12,16 +12,23 @@ import { GovernanceRepository } from "./governanceRepository.js";
 import { AgentExecutionRepository } from "../agent-executions/agentExecutionRepository.js";
 import { assertExecutionTransition } from "../agent-executions/executionStateMachine.js";
 
+import { ApprovalWebhookService } from "./approvalWebhookService.js";
+
 type UpsertApprovalGateInput = z.infer<typeof upsertApprovalGateSchema>;
 type UpsertFeatureFlagInput = z.infer<typeof upsertAgentFeatureFlagSchema>;
 
 export class GovernanceService {
+  private readonly webhookService: ApprovalWebhookService;
+
   constructor(
     private readonly governance: GovernanceRepository,
     private readonly audit: AuditService,
     private readonly tenancy: TenancyService,
-    private readonly executions: AgentExecutionRepository
-  ) {}
+    private readonly executions: AgentExecutionRepository,
+    webhookService?: ApprovalWebhookService
+  ) {
+    this.webhookService = webhookService ?? new ApprovalWebhookService((governance as any).prisma);
+  }
 
   listApprovalGates(input: { organizationId: string }) {
     return this.governance.listApprovalGates(input);
@@ -172,6 +179,12 @@ export class GovernanceService {
       before: existing,
       after: approval,
       metadata: { status: input.status, note: input.note }
+    });
+
+    this.webhookService.dispatch("approval.reviewed", {
+      ...approval,
+      reviewedByUserId: input.reviewedByUserId,
+      reviewComment: input.note
     });
 
     return approval;

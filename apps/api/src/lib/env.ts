@@ -69,7 +69,24 @@ export const envSchema = z
           }
         },
         { message: "AGENT_RUNNER_WEBHOOK_URL must be a valid URL" }
-      )
+      ),
+    APPROVAL_WEBHOOK_URL: z
+      .string()
+      .optional()
+      .transform((val) => (val && val.trim() !== "" ? val.trim() : undefined))
+      .refine(
+        (val) => {
+          if (!val) return true;
+          try {
+            new URL(val);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        { message: "APPROVAL_WEBHOOK_URL must be a valid URL" }
+      ),
+    APPROVAL_WEBHOOK_SECRET: z.string().optional()
   })
   .superRefine((data, ctx) => {
     const isSecretMissingOrDefault =

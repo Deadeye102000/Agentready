@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Navbar } from "../components/Navbar";
 import { SandboxController } from "../components/SandboxController";
+import { LandingView } from "../components/LandingView";
 import {
   fetchDashboardData,
   fetchRegressionData,
@@ -36,12 +37,24 @@ function ErrorAlert({ message, isFallback }: { message: string; isFallback: bool
 
 export default async function HomePage() {
   const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("agentready_session")?.value;
+
+  // Unauthenticated visitors to the root URL see the public landing page
+  if (!sessionToken) {
+    return <LandingView isAuthenticated={false} />;
+  }
+
   const cookieHeader = cookieStore.toString();
 
   const [dashboardRes, regressionRes] = await Promise.all([
     fetchDashboardData(cookieHeader),
     fetchRegressionData(cookieHeader)
   ]);
+
+  // If session is expired or invalid (401 Unauthorized), show landing page
+  if (dashboardRes.error && (dashboardRes.error.includes("401") || dashboardRes.error.includes("Unauthorized"))) {
+    return <LandingView isAuthenticated={false} />;
+  }
 
   const dashboard = dashboardRes.data;
 

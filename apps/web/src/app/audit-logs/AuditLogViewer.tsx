@@ -80,12 +80,14 @@ export function AuditLogViewer({
     let userCount = 0;
     let agentCount = 0;
     let systemCount = 0;
+    let webhookFailures = 0;
     for (const log of logs) {
       if (log.actorType === "USER") userCount++;
       else if (log.actorType === "AGENT") agentCount++;
       else if (log.actorType === "SYSTEM") systemCount++;
+      if (log.action === "approval.webhook_delivery_failed") webhookFailures++;
     }
-    return { userCount, agentCount, systemCount, total: logs.length };
+    return { userCount, agentCount, systemCount, webhookFailures, total: logs.length };
   }, [logs]);
 
   return (
@@ -104,7 +106,7 @@ export function AuditLogViewer({
         boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
       }}>
         <div style={{ maxWidth: "600px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
             <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: "800", color: "#0f172a" }}>
               Audit Logs
             </h1>
@@ -123,6 +125,29 @@ export function AuditLogViewer({
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#22c55e" }}></span>
               Immutable Ledger Enforced
             </span>
+            {actorStats.webhookFailures > 0 && (
+              <button
+                id="filter-webhook-failures-btn"
+                onClick={() => setSearchTerm("approval.webhook_delivery_failed")}
+                title="Click to view all webhook delivery failure events"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  border: "1px solid #fecaca",
+                  borderRadius: "999px",
+                  padding: "2px 10px",
+                  fontSize: "0.75rem",
+                  fontWeight: "700",
+                  cursor: "pointer"
+                }}
+              >
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444" }}></span>
+                🚨 {actorStats.webhookFailures} Webhook Delivery Failure{actorStats.webhookFailures > 1 ? "s" : ""}
+              </button>
+            )}
           </div>
           <p style={{ margin: 0, fontSize: "0.875rem", color: "#64748b", lineHeight: 1.5 }}>
             Cryptographically sealed timeline of all governance events, authentication changes, approval reviews, and execution dispatches. All records are protected by database triggers revoking UPDATE and DELETE permissions.
@@ -308,6 +333,7 @@ export function AuditLogViewer({
             {filteredLogs.map((log, idx) => {
               const isExpanded = expandedId === log.id;
               const hasMetadata = log.metadata && Object.keys(log.metadata).length > 0;
+              const isWebhookFailure = log.action === "approval.webhook_delivery_failed";
 
               return (
                 <div
@@ -315,8 +341,9 @@ export function AuditLogViewer({
                   id={`audit-log-item-${log.id}`}
                   style={{
                     borderBottom: idx === filteredLogs.length - 1 ? "none" : "1px solid #f1f5f9",
+                    borderLeft: isWebhookFailure ? "4px solid #ef4444" : "4px solid transparent",
                     padding: "16px 20px",
-                    background: isExpanded ? "#f8fafc" : "#ffffff",
+                    background: isExpanded ? (isWebhookFailure ? "#fff1f2" : "#f8fafc") : (isWebhookFailure ? "#fff5f5" : "#ffffff"),
                     transition: "background 0.15s ease"
                   }}
                 >
@@ -367,9 +394,9 @@ export function AuditLogViewer({
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "5px",
-                          background: "#f8fafc",
-                          color: "#475569",
-                          border: "1px solid #cbd5e1",
+                          background: isWebhookFailure ? "#fef2f2" : "#f8fafc",
+                          color: isWebhookFailure ? "#b91c1c" : "#475569",
+                          border: isWebhookFailure ? "1px solid #fecaca" : "1px solid #cbd5e1",
                           borderRadius: "999px",
                           padding: "3px 10px",
                           fontSize: "0.75rem",
@@ -381,14 +408,19 @@ export function AuditLogViewer({
 
                       {/* Action Name */}
                       <code style={{
-                        background: "#0f172a",
-                        color: "#f8fafc",
+                        background: isWebhookFailure ? "#fef2f2" : "#0f172a",
+                        color: isWebhookFailure ? "#b91c1c" : "#f8fafc",
+                        border: isWebhookFailure ? "1px solid #fecaca" : "none",
                         padding: "3px 8px",
                         borderRadius: "5px",
                         fontSize: "0.82rem",
                         fontWeight: "700",
-                        letterSpacing: "-0.2px"
+                        letterSpacing: "-0.2px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px"
                       }}>
+                        {isWebhookFailure && <span>🚨</span>}
                         {log.action}
                       </code>
 
