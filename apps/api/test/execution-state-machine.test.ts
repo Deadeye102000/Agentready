@@ -38,24 +38,62 @@ describe("Execution State Machine Tests", () => {
   });
 
   describe("Unit Tests: assertExecutionTransition", () => {
-    it("allows valid transitions", () => {
-      // QUEUED -> RUNNING
+    it("allows valid transitions from QUEUED", () => {
       assert.doesNotThrow(() => assertExecutionTransition("QUEUED", "RUNNING"));
-      // RUNNING -> WAITING_FOR_APPROVAL
+      assert.doesNotThrow(() => assertExecutionTransition("QUEUED", "CANCELLED"));
+    });
+
+    it("allows valid transitions from RUNNING", () => {
       assert.doesNotThrow(() => assertExecutionTransition("RUNNING", "WAITING_FOR_APPROVAL"));
-      // WAITING_FOR_APPROVAL -> SUCCEEDED
+      assert.doesNotThrow(() => assertExecutionTransition("RUNNING", "SUCCEEDED"));
+      assert.doesNotThrow(() => assertExecutionTransition("RUNNING", "FAILED"));
+      assert.doesNotThrow(() => assertExecutionTransition("RUNNING", "CANCELLED"));
+    });
+
+    it("allows valid transitions from WAITING_FOR_APPROVAL", () => {
+      assert.doesNotThrow(() => assertExecutionTransition("WAITING_FOR_APPROVAL", "RUNNING"));
       assert.doesNotThrow(() => assertExecutionTransition("WAITING_FOR_APPROVAL", "SUCCEEDED"));
+      assert.doesNotThrow(() => assertExecutionTransition("WAITING_FOR_APPROVAL", "FAILED"));
+      assert.doesNotThrow(() => assertExecutionTransition("WAITING_FOR_APPROVAL", "CANCELLED"));
     });
 
-    it("rejects invalid transitions", () => {
-      // QUEUED -> SUCCEEDED (Cannot jump RUNNING)
-      assert.throws(() => assertExecutionTransition("QUEUED", "SUCCEEDED"), /Cannot transition agent execution/);
-      // SUCCEEDED -> RUNNING (Cannot move out of terminal state)
-      assert.throws(() => assertExecutionTransition("SUCCEEDED", "RUNNING"), /Cannot transition/);
+    it("rejects invalid transitions from QUEUED", () => {
+      assert.throws(() => assertExecutionTransition("QUEUED", "SUCCEEDED"), /Cannot transition agent execution from QUEUED to SUCCEEDED/);
+      assert.throws(() => assertExecutionTransition("QUEUED", "FAILED"), /Cannot transition agent execution from QUEUED to FAILED/);
+      assert.throws(() => assertExecutionTransition("QUEUED", "WAITING_FOR_APPROVAL"), /Cannot transition agent execution from QUEUED to WAITING_FOR_APPROVAL/);
     });
 
-    it("no-op for transition to same state", () => {
+    it("rejects any transitions from terminal state SUCCEEDED", () => {
+      assert.throws(() => assertExecutionTransition("SUCCEEDED", "QUEUED"), /Cannot transition agent execution from SUCCEEDED to QUEUED/);
+      assert.throws(() => assertExecutionTransition("SUCCEEDED", "RUNNING"), /Cannot transition agent execution from SUCCEEDED to RUNNING/);
+      assert.throws(() => assertExecutionTransition("SUCCEEDED", "WAITING_FOR_APPROVAL"), /Cannot transition agent execution from SUCCEEDED to WAITING_FOR_APPROVAL/);
+      assert.throws(() => assertExecutionTransition("SUCCEEDED", "FAILED"), /Cannot transition agent execution from SUCCEEDED to FAILED/);
+      assert.throws(() => assertExecutionTransition("SUCCEEDED", "CANCELLED"), /Cannot transition agent execution from SUCCEEDED to CANCELLED/);
+    });
+
+    it("rejects any transitions from terminal state FAILED", () => {
+      assert.throws(() => assertExecutionTransition("FAILED", "QUEUED"), /Cannot transition agent execution from FAILED to QUEUED/);
+      assert.throws(() => assertExecutionTransition("FAILED", "RUNNING"), /Cannot transition agent execution from FAILED to RUNNING/);
+      assert.throws(() => assertExecutionTransition("FAILED", "WAITING_FOR_APPROVAL"), /Cannot transition agent execution from FAILED to WAITING_FOR_APPROVAL/);
+      assert.throws(() => assertExecutionTransition("FAILED", "SUCCEEDED"), /Cannot transition agent execution from FAILED to SUCCEEDED/);
+      assert.throws(() => assertExecutionTransition("FAILED", "CANCELLED"), /Cannot transition agent execution from FAILED to CANCELLED/);
+    });
+
+    it("rejects any transitions from terminal state CANCELLED", () => {
+      assert.throws(() => assertExecutionTransition("CANCELLED", "QUEUED"), /Cannot transition agent execution from CANCELLED to QUEUED/);
+      assert.throws(() => assertExecutionTransition("CANCELLED", "RUNNING"), /Cannot transition agent execution from CANCELLED to RUNNING/);
+      assert.throws(() => assertExecutionTransition("CANCELLED", "WAITING_FOR_APPROVAL"), /Cannot transition agent execution from CANCELLED to WAITING_FOR_APPROVAL/);
+      assert.throws(() => assertExecutionTransition("CANCELLED", "SUCCEEDED"), /Cannot transition agent execution from CANCELLED to SUCCEEDED/);
+      assert.throws(() => assertExecutionTransition("CANCELLED", "FAILED"), /Cannot transition agent execution from CANCELLED to FAILED/);
+    });
+
+    it("no-op for transition to same state (self transitions)", () => {
+      assert.doesNotThrow(() => assertExecutionTransition("QUEUED", "QUEUED"));
       assert.doesNotThrow(() => assertExecutionTransition("RUNNING", "RUNNING"));
+      assert.doesNotThrow(() => assertExecutionTransition("WAITING_FOR_APPROVAL", "WAITING_FOR_APPROVAL"));
+      assert.doesNotThrow(() => assertExecutionTransition("SUCCEEDED", "SUCCEEDED"));
+      assert.doesNotThrow(() => assertExecutionTransition("FAILED", "FAILED"));
+      assert.doesNotThrow(() => assertExecutionTransition("CANCELLED", "CANCELLED"));
     });
   });
 
