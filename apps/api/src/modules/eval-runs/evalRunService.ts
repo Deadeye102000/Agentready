@@ -550,14 +550,23 @@ export class EvalRunService {
     const newlyFailing: Array<{ id: string; name: string }> = [];
     const newlyPassing: Array<{ id: string; name: string }> = [];
 
+    // ⚡ Bolt Optimization: Fix N+1 query issue
+    // Pre-fetch all necessary EvalCase records in a single query
+    // instead of querying inside the loop for each caseId.
+    // This significantly speeds up regression report generation for suites with many cases.
+    const caseIds = Array.from(runsByCase.keys());
+    const evalCases = await this.prisma.evalCase.findMany({
+      where: { id: { in: caseIds } },
+      select: { id: true, name: true }
+    });
+    // Create an in-memory map for fast O(1) lookups inside the loop
+    const evalCaseMap = new Map(evalCases.map((c) => [c.id, c.name]));
+
     for (const [caseId, caseRuns] of runsByCase.entries()) {
       const currentRun = caseRuns[0];
       const previousRun = caseRuns[1];
 
-      const evalCase = await this.prisma.evalCase.findFirst({
-        where: { id: caseId }
-      });
-      const caseName = evalCase?.name || `Case ${caseId}`;
+      const caseName = evalCaseMap.get(caseId) || `Case ${caseId}`;
 
       if (currentRun.score !== null && currentRun.score !== undefined) {
         currentTotalScore += currentRun.score;
