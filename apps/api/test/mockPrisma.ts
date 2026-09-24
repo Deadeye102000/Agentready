@@ -363,6 +363,26 @@ mockPrisma.taskContract.update = async (args: any) => {
 
 
 
+
+mockPrisma.agentExecution.groupBy = async (args: any) => {
+  const where = args.where || {};
+  const items = mockStore.agentExecutions.filter(
+    (e) =>
+      (!where.id || e.id === where.id) &&
+      (!where.organizationId || e.organizationId === where.organizationId) &&
+      (!where.status || e.status === where.status) &&
+      (!where.projectId || e.projectId === where.projectId)
+  );
+  const groups: Record<string, number> = {};
+  for (const item of items) {
+    groups[item.status] = (groups[item.status] || 0) + 1;
+  }
+  return Object.entries(groups).map(([status, count]) => ({
+    status,
+    _count: { _all: count }
+  }));
+};
+
 mockPrisma.agentExecution.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentExecutions.filter(
@@ -522,6 +542,25 @@ mockPrisma.toolCallTrace.findFirst = async (args: any) => {
     if (where.approvalRequestId && t.approvalRequestId !== where.approvalRequestId) return false;
     return true;
   }) || null;
+};
+
+
+mockPrisma.toolCallTrace.groupBy = async (args: any) => {
+  const where = args.where || {};
+  const items = mockStore.toolCallTraces.filter((t) => {
+    if (where.executionId && t.executionId !== where.executionId) return false;
+    if (where.organizationId && t.organizationId !== where.organizationId) return false;
+    if (where.status && t.status !== where.status) return false;
+    return true;
+  });
+  const groups: Record<string, number> = {};
+  for (const item of items) {
+    groups[item.status] = (groups[item.status] || 0) + 1;
+  }
+  return Object.entries(groups).map(([status, count]) => ({
+    status,
+    _count: { _all: count }
+  }));
 };
 
 mockPrisma.toolCallTrace.count = async (args: any) => {
@@ -968,6 +1007,24 @@ mockPrisma.evalRun.create = async (args: any) => {
   };
   mockStore.evalRuns.push(item);
   return item;
+};
+
+
+mockPrisma.evalRun.groupBy = async (args: any) => {
+  const where = args.where || {};
+  const items = mockStore.evalRuns.filter((er) => {
+    if (where.organizationId && er.organizationId !== where.organizationId) return false;
+    if (where.status && er.status !== where.status) return false;
+    return true;
+  });
+  const groups: Record<string, number> = {};
+  for (const item of items) {
+    groups[item.status] = (groups[item.status] || 0) + 1;
+  }
+  return Object.entries(groups).map(([status, count]) => ({
+    status,
+    _count: { _all: count }
+  }));
 };
 
 mockPrisma.evalRun.count = async (args: any) => {
