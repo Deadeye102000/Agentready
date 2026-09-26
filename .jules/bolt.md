@@ -1,0 +1,3 @@
+## 2025-01-22 - Prisma native column comparisons
+**Learning:** For Prisma database queries, we can use native column comparisons via the `.fields` property (e.g., `model.fields.fieldName`) to push filters to the database level rather than handling filtering application-side. However, in unit tests, `mockPrisma` throws or doesn't support comparing to a field object. We must manually handle `where.attemptCount.lt` if it is an object representing `.fields.maxAttempts` and `mockPrisma.agentExecution.fields` should be initialized.
+**Action:** Always prefer DB-level filtering using `.fields` over application-level filtering, but ensure you also update `mockPrisma.ts` to properly support the new query format in tests, otherwise `pnpm test` will fail.

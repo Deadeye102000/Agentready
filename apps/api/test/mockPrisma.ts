@@ -466,14 +466,37 @@ mockPrisma.agentExecution.update = async (args: any) => {
   return match;
 };
 
+// Initialize fields object to support native column comparisons in mock
+if (!mockPrisma.agentExecution.fields) {
+  mockPrisma.agentExecution.fields = {
+    maxAttempts: {
+      modelName: 'AgentExecution',
+      name: 'maxAttempts',
+      typeName: 'Int',
+      isList: false,
+      isEnum: false
+    }
+  };
+}
+
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+    (e) => {
+      if (where.organizationId && e.organizationId !== where.organizationId) return false;
+      if (where.projectId && e.projectId !== where.projectId) return false;
+      if (where.status && e.status !== where.status) return false;
+      if (where.failureReason && e.failureReason !== where.failureReason) return false;
+
+      // Handle attemptCount < maxAttempts column comparison
+      if (where.attemptCount && where.attemptCount.lt) {
+        if (where.attemptCount.lt === mockPrisma.agentExecution.fields.maxAttempts) {
+          if ((e.attemptCount ?? 0) >= (e.maxAttempts ?? 1)) return false;
+        }
+      }
+
+      return true;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
