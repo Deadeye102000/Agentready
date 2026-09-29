@@ -126,6 +126,29 @@ export class GovernanceRepository {
     });
   }
 
+  async findFeatureFlags(input: { organizationId: string; agentId?: string | null; capabilities: string[] }) {
+    const flags = await this.prisma.agentFeatureFlag.findMany({
+      where: {
+        organizationId: input.organizationId,
+        OR: [
+          { agentId: input.agentId ?? null },
+          { agentId: null }
+        ],
+        capability: { in: input.capabilities }
+      }
+    });
+
+    const resolvedFlags = new Map<string, typeof flags[0]>();
+    for (const flag of flags) {
+      const existing = resolvedFlags.get(flag.capability);
+      // specific agent override global null agentId flag
+      if (!existing || (!existing.agentId && flag.agentId)) {
+        resolvedFlags.set(flag.capability, flag);
+      }
+    }
+    return resolvedFlags;
+  }
+
   async createApprovalRequest(input: Prisma.ApprovalRequestUncheckedCreateInput & { organizationId: string }) {
     const row = await this.prisma.approvalRequest.create({ data: input });
     this.webhookService.dispatch("approval.created", row);

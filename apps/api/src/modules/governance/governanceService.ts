@@ -60,6 +60,10 @@ export class GovernanceService {
     return this.governance.listFeatureFlags(input);
   }
 
+  findFeatureFlags(input: { organizationId: string; agentId?: string | null; capabilities: string[] }) {
+    return this.governance.findFeatureFlags(input);
+  }
+
   async upsertFeatureFlag(input: UpsertFeatureFlagInput & { actorUserId?: string }) {
     if (input.agentId) {
       await this.tenancy.requireAgent({

@@ -855,23 +855,15 @@ export class AgentExecutionService {
 
     // b. Check Feature Flags
     if (decision !== "BLOCK") {
-      const [toolFlag, globalFlag, execFlag] = await Promise.all([
-        this.governance.findFeatureFlag({
-          organizationId: input.organizationId,
-          agentId: execution.agentId,
-          capability: input.toolName
-        }),
-        this.governance.findFeatureFlag({
-          organizationId: input.organizationId,
-          agentId: execution.agentId,
-          capability: "tool_execution"
-        }),
-        this.governance.findFeatureFlag({
-          organizationId: input.organizationId,
-          agentId: execution.agentId,
-          capability: "agent_execution"
-        })
-      ]);
+      const flagsMap = await this.governance.findFeatureFlags({
+        organizationId: input.organizationId,
+        agentId: execution.agentId,
+        capabilities: [input.toolName, "tool_execution", "agent_execution"]
+      });
+
+      const toolFlag = flagsMap.get(input.toolName);
+      const globalFlag = flagsMap.get("tool_execution");
+      const execFlag = flagsMap.get("agent_execution");
 
       if (execFlag && execFlag.state === "DISABLED") {
         decision = "BLOCK";
