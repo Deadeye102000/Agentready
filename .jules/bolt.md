@@ -1,0 +1,3 @@
+## 2025-01-28 - Optimize count queries with groupBy in Observability Repository
+**Learning:** Getting counts of multiple specific states for a model can result in N+1 query-like problems when hitting the database multiple times. Using Prisma's `groupBy` for querying these aggregates combines the counts into a single query. Mocking `.groupBy` using `reduce` to aggregate by states helps accurately test these metrics without needing real database implementation.
+**Action:** Use Prisma `groupBy` instead of separate `.count()` calls when fetching grouped aggregate metrics to minimize database round-trips. Keep `apps/api/test/mockPrisma.ts` updated with mocking these complex Prisma capabilities.
