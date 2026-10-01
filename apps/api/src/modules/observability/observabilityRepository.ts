@@ -16,15 +16,14 @@ export class ObservabilityRepository {
       return null;
     }
 
+    // PERFORMANCE OPTIMIZATION: Combine multiple count queries into groupBys to reduce database roundtrips.
+    // This reduces the number of initial DB queries for dashboard metrics from 8 separate counts to 4 grouped queries,
+    // saving network latency and connection pool usage overhead.
     const [
-      executions,
-      waitingForApproval,
-      failedExecutions,
-      toolCalls,
-      blockedToolCalls,
+      agentExecutionGroups,
+      toolCallTraceGroups,
+      evalRunGroups,
       pendingApprovals,
-      evalRuns,
-      passedEvalRuns,
       recentExecutions,
       recentToolCalls,
       recentEvalRuns,
@@ -33,16 +32,22 @@ export class ObservabilityRepository {
       mcpServers,
       pendingApprovalsList
     ] = await Promise.all([
-      this.prisma.agentExecution.count({ where: { organizationId: organization.id } }),
-      this.prisma.agentExecution.count({
-        where: { organizationId: organization.id, status: "WAITING_FOR_APPROVAL" }
+      this.prisma.agentExecution.groupBy({
+        by: ['status'],
+        where: { organizationId: organization.id },
+        _count: { _all: true }
       }),
-      this.prisma.agentExecution.count({ where: { organizationId: organization.id, status: "FAILED" } }),
-      this.prisma.toolCallTrace.count({ where: { organizationId: organization.id } }),
-      this.prisma.toolCallTrace.count({ where: { organizationId: organization.id, status: "BLOCKED" } }),
+      this.prisma.toolCallTrace.groupBy({
+        by: ['status'],
+        where: { organizationId: organization.id },
+        _count: { _all: true }
+      }),
+      this.prisma.evalRun.groupBy({
+        by: ['status'],
+        where: { organizationId: organization.id },
+        _count: { _all: true }
+      }),
       this.prisma.approvalRequest.count({ where: { organizationId: organization.id, status: "PENDING" } }),
-      this.prisma.evalRun.count({ where: { organizationId: organization.id } }),
-      this.prisma.evalRun.count({ where: { organizationId: organization.id, status: "PASSED" } }),
       this.prisma.agentExecution.findMany({
         where: { organizationId: organization.id },
         include: {
@@ -91,6 +96,16 @@ export class ObservabilityRepository {
         take: 10
       })
     ]);
+
+    const executions = agentExecutionGroups.reduce((acc, curr) => acc + curr._count._all, 0);
+    const waitingForApproval = agentExecutionGroups.find(g => g.status === "WAITING_FOR_APPROVAL")?._count._all ?? 0;
+    const failedExecutions = agentExecutionGroups.find(g => g.status === "FAILED")?._count._all ?? 0;
+
+    const toolCalls = toolCallTraceGroups.reduce((acc, curr) => acc + curr._count._all, 0);
+    const blockedToolCalls = toolCallTraceGroups.find(g => g.status === "BLOCKED")?._count._all ?? 0;
+
+    const evalRuns = evalRunGroups.reduce((acc, curr) => acc + curr._count._all, 0);
+    const passedEvalRuns = evalRunGroups.find(g => g.status === "PASSED")?._count._all ?? 0;
 
     return {
       organization,
