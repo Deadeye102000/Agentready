@@ -486,14 +486,34 @@ mockPrisma.agentExecution.update = async (args: any) => {
   return match;
 };
 
+// Mock for Prisma column comparisons
+mockPrisma.agentExecution.fields = {
+  maxAttempts: { modelName: 'AgentExecution', name: 'maxAttempts', typeName: 'Int' }
+};
+
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
+    (e) => {
+      let attemptCountMatch = true;
+      if (where.attemptCount !== undefined) {
+        if (typeof where.attemptCount === 'object' && where.attemptCount !== null) {
+          if (where.attemptCount.lt && where.attemptCount.lt.name === 'maxAttempts') {
+            attemptCountMatch = e.attemptCount < e.maxAttempts;
+          } else {
+            attemptCountMatch = false; // Add other conditions as needed
+          }
+        } else {
+          attemptCountMatch = e.attemptCount === where.attemptCount;
+        }
+      }
+
+      return (!where.organizationId || e.organizationId === where.organizationId) &&
       (!where.projectId || e.projectId === where.projectId) &&
       (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+      (!where.failureReason || e.failureReason === where.failureReason) &&
+      attemptCountMatch;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
