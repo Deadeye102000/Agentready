@@ -403,12 +403,9 @@ export class AgentExecutionService {
    * to define the API so the worker can import and use it without changes.
    */
   async listRetryable(input: { organizationId: string }) {
-    const candidates = await this.executions.listRetryable(input);
-    // Filter in application code: attemptCount < maxAttempts
-    // TODO(WORKER-READY): Push this filter to SQL once worker is extracted.
-    return candidates.filter(
-      (e) => (e.attemptCount ?? 0) < (e.maxAttempts ?? 1)
-    );
+    // Return candidates directly since attemptCount < maxAttempts filtering
+    // is now handled natively at the database level by Prisma.
+    return this.executions.listRetryable(input);
   }
 
   // ─── Shared (used by both layers) ────────────────────────────────────────────
