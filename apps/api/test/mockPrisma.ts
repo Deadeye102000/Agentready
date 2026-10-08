@@ -488,13 +488,21 @@ mockPrisma.agentExecution.update = async (args: any) => {
 
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
-  const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
-  );
+  const matches = mockStore.agentExecutions.filter((e) => {
+    if (where.organizationId && e.organizationId !== where.organizationId) return false;
+    if (where.projectId && e.projectId !== where.projectId) return false;
+    if (where.status && e.status !== where.status) return false;
+    if (where.failureReason && e.failureReason !== where.failureReason) return false;
+    // Handle Prisma field comparisons (e.g. attemptCount < maxAttempts)
+    if (where.attemptCount?.lt !== undefined) {
+      // We assume field comparison like attemptCount: { lt: prisma.agentExecution.fields.maxAttempts }
+      // But in the mock, we just manually compare the object properties
+      if (typeof where.attemptCount.lt === "object" && where.attemptCount.lt.name === "maxAttempts") {
+        if (e.attemptCount >= e.maxAttempts) return false;
+      }
+    }
+    return true;
+  });
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
     const contract = mockStore.taskContracts.find((c) => c.id === e.contractId);
