@@ -59,12 +59,14 @@ export function AuditLogViewer({
   };
 
   const filteredLogs = useMemo(() => {
+    // ⚡ Bolt: Hoist string lowercasing outside the filter loop
+    // Changes operation from O(N) string allocations to O(1)
+    const term = searchTerm ? searchTerm.toLowerCase() : "";
     return logs.filter((log) => {
       if (filterActor !== "ALL" && log.actorType !== filterActor) {
         return false;
       }
-      if (!searchTerm) return true;
-      const term = searchTerm.toLowerCase();
+      if (!term) return true;
       const actionMatch = log.action.toLowerCase().includes(term);
       const targetMatch = log.targetType.toLowerCase().includes(term) || (log.targetId && log.targetId.toLowerCase().includes(term));
       const userMatch = log.actorUser && (

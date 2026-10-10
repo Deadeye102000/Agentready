@@ -43,11 +43,13 @@ export function ExecutionExplorer({ executions }: { executions: ExecutionItem[] 
   const highRiskRuns = executions.filter(e => (e.riskScore ?? 0) >= 70).length;
 
   const filteredExecutions = useMemo(() => {
+    // ⚡ Bolt: Hoist string lowercasing outside the filter loop
+    // Changes operation from O(N) string allocations to O(1)
+    const searchLower = searchTerm ? searchTerm.toLowerCase() : "";
     return executions.filter(exec => {
       const matchesStatus = statusFilter === "ALL" || exec.status === statusFilter;
-      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
-        !searchTerm ||
+        !searchLower ||
         exec.id.toLowerCase().includes(searchLower) ||
         (exec.objective && exec.objective.toLowerCase().includes(searchLower)) ||
         (exec.agent?.name && exec.agent.name.toLowerCase().includes(searchLower)) ||
