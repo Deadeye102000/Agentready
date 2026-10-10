@@ -54,15 +54,17 @@ export function TraceInspector({
   const avgLatency = latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
 
   const filteredTraces = useMemo(() => {
+    // ⚡ Bolt: Hoist string lowercasing outside the filter loop
+    // Changes operation from O(N) string allocations to O(1)
+    const searchLower = searchTerm ? searchTerm.toLowerCase() : "";
     return traces.filter(trace => {
       const matchesStatus =
         statusFilter === "ALL" ||
         trace.status === statusFilter ||
         (statusFilter === "SUCCESS" && (trace.status === "SUCCEEDED" || trace.status === "SUCCESS"));
       
-      const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
-        !searchTerm ||
+        !searchLower ||
         trace.id.toLowerCase().includes(searchLower) ||
         trace.toolName.toLowerCase().includes(searchLower) ||
         (trace.agent?.name && trace.agent.name.toLowerCase().includes(searchLower)) ||
