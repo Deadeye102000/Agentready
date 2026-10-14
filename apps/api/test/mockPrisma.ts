@@ -489,11 +489,18 @@ mockPrisma.agentExecution.update = async (args: any) => {
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+    (e) => {
+      if (where.organizationId && e.organizationId !== where.organizationId) return false;
+      if (where.projectId && e.projectId !== where.projectId) return false;
+      if (where.status && e.status !== where.status) return false;
+      if (where.failureReason && e.failureReason !== where.failureReason) return false;
+      if (where.attemptCount && typeof where.attemptCount === "object") {
+        if (where.attemptCount.lt && where.attemptCount.lt.name === "maxAttempts") {
+          if ((e.attemptCount ?? 0) >= (e.maxAttempts ?? 1)) return false;
+        }
+      }
+      return true;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
