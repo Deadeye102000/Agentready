@@ -1,3 +1,6 @@
 ## 2024-03-20 - [Prisma Multiple Counts Optimization]
 **Learning:** For Prisma database queries, executing multiple separate `count()` calls on the same table with different conditions causes unnecessary database roundtrips. Prisma's `groupBy` feature can calculate metrics for all statuses in a single query, significantly reducing latency and connection pool overhead.
 **Action:** When a dashboard or aggregate view requires counts grouped by categorical fields (like `status`), always use a single `groupBy` combined with application-level reduction rather than issuing separate `count()` queries per status.
+## 2024-03-20 - Push Filter To DB Using Prisma Fields
+**Learning:** Prisma's `.fields` property (e.g. `model.fields.fieldName`) can be used in queries to perform column comparisons natively at the database level, avoiding the need to over-fetch data and perform application-side filtering (e.g. `attemptCount: { lt: prisma.agentExecution.fields.maxAttempts }`). Furthermore, `mockPrisma.ts` in the test suite must be updated to correctly interpret these native column comparisons to avoid failing tests.
+**Action:** Use native Prisma column comparisons (`.fields`) whenever possible to optimize database queries, and ensure `mockPrisma.ts` logic is updated to reflect the new query structure.
