@@ -394,6 +394,10 @@ mockPrisma.agentExecution.count = async (args: any) => {
 };
 
 // Executions
+mockPrisma.agentExecution.fields = {
+  maxAttempts: { isPrismaField: true, name: 'maxAttempts' }
+};
+
 mockPrisma.agentExecution.create = async (args: any) => {
   const data = args.data;
   const execution = {
@@ -489,11 +493,22 @@ mockPrisma.agentExecution.update = async (args: any) => {
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+    (e) => {
+      if (where.organizationId && e.organizationId !== where.organizationId) return false;
+      if (where.projectId && e.projectId !== where.projectId) return false;
+      if (where.status && e.status !== where.status) return false;
+      if (where.failureReason && e.failureReason !== where.failureReason) return false;
+
+      if (where.attemptCount && where.attemptCount.lt) {
+        const lt = where.attemptCount.lt;
+        if (lt && lt.isPrismaField && lt.name === 'maxAttempts') {
+          if (e.attemptCount >= e.maxAttempts) return false;
+        } else {
+          if (e.attemptCount >= lt) return false;
+        }
+      }
+      return true;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
