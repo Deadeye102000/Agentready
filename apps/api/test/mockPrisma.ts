@@ -383,6 +383,16 @@ mockPrisma.agentExecution.groupBy = async (args: any) => {
   }));
 };
 
+mockPrisma.agentExecution.fields = {
+  maxAttempts: {
+    modelName: 'AgentExecution',
+    name: 'maxAttempts',
+    typeName: 'Int',
+    isList: false,
+    isEnum: false,
+  }
+};
+
 mockPrisma.agentExecution.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentExecutions.filter(
@@ -489,11 +499,27 @@ mockPrisma.agentExecution.update = async (args: any) => {
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+    (e) => {
+      if (where.organizationId && e.organizationId !== where.organizationId) return false;
+      if (where.projectId && e.projectId !== where.projectId) return false;
+      if (where.status && e.status !== where.status) return false;
+      if (where.failureReason && e.failureReason !== where.failureReason) return false;
+      if (where.attemptCount !== undefined) {
+        if (typeof where.attemptCount === 'object' && where.attemptCount !== null) {
+          if (where.attemptCount.lt !== undefined) {
+            // Check if it's a native field comparison
+            if (where.attemptCount.lt.modelName === 'AgentExecution' && where.attemptCount.lt.name === 'maxAttempts') {
+              if (e.attemptCount >= e.maxAttempts) return false;
+            } else if (typeof where.attemptCount.lt === 'number') {
+              if (e.attemptCount >= where.attemptCount.lt) return false;
+            }
+          }
+        } else if (e.attemptCount !== where.attemptCount) {
+          return false;
+        }
+      }
+      return true;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
