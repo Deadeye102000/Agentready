@@ -550,13 +550,17 @@ export class EvalRunService {
     const newlyFailing: Array<{ id: string; name: string }> = [];
     const newlyPassing: Array<{ id: string; name: string }> = [];
 
+    const caseIds = Array.from(runsByCase.keys());
+    const evalCasesList = await this.prisma.evalCase.findMany({
+      where: { id: { in: caseIds } }
+    });
+    const evalCasesMap = new Map(evalCasesList.map(c => [c.id, c]));
+
     for (const [caseId, caseRuns] of runsByCase.entries()) {
       const currentRun = caseRuns[0];
       const previousRun = caseRuns[1];
 
-      const evalCase = await this.prisma.evalCase.findFirst({
-        where: { id: caseId }
-      });
+      const evalCase = evalCasesMap.get(caseId);
       const caseName = evalCase?.name || `Case ${caseId}`;
 
       if (currentRun.score !== null && currentRun.score !== undefined) {
