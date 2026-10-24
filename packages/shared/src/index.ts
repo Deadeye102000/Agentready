@@ -73,9 +73,42 @@ export const upsertApprovalGateSchema = z.object({
   enabled: z.boolean().optional().default(true)
 });
 
+// Cache compiled regexes for complex wildcard patterns to avoid recompilation overhead
+const matchPatternRegexCache = new Map<string, RegExp>();
+
 export function matchPattern(pattern: string, action: string): boolean {
-  const regexStr = "^" + pattern.split("*").map(s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")).join(".*") + "$";
-  const regex = new RegExp(regexStr);
+  // Fast path: exact match or match all
+  if (pattern === '*') return true;
+
+  const starIndex1 = pattern.indexOf('*');
+  if (starIndex1 === -1) return pattern === action;
+
+  // Fast path: single wildcard
+  const starIndex2 = pattern.indexOf('*', starIndex1 + 1);
+  if (starIndex2 === -1) {
+    if (starIndex1 === 0) return action.endsWith(pattern.slice(1));
+    if (starIndex1 === pattern.length - 1) return action.startsWith(pattern.slice(0, -1));
+
+    const prefix = pattern.slice(0, starIndex1);
+    const suffix = pattern.slice(starIndex1 + 1);
+    return action.startsWith(prefix) && action.endsWith(suffix) && action.length >= pattern.length - 1;
+  }
+
+  // Fast path: double wildcard at boundaries (e.g. *substring*)
+  if (starIndex1 === 0 && starIndex2 === pattern.length - 1 && pattern.indexOf('*', starIndex2 + 1) === -1) {
+    return action.includes(pattern.slice(1, -1));
+  }
+
+  // Fallback to regex for complex patterns
+  let regex = matchPatternRegexCache.get(pattern);
+  if (!regex) {
+    // Prevent unbounded memory growth if patterns are dynamically generated
+    if (matchPatternRegexCache.size > 1000) matchPatternRegexCache.clear();
+
+    const regexStr = "^" + pattern.split("*").map(s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")).join(".*") + "$";
+    regex = new RegExp(regexStr);
+    matchPatternRegexCache.set(pattern, regex);
+  }
   return regex.test(action);
 }
 
