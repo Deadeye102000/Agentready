@@ -101,9 +101,9 @@ export class AgentExecutionRepository {
         // Only retry if there are attempts remaining and the failure is retryable
         // (i.e., not timed-out or policy-blocked — those need human review)
         failureReason: "RUNNER_ERROR",
-        // attemptCount < maxAttempts — Prisma supports column comparisons via raw SQL,
-        // but for simplicity the service layer filters after fetch for now.
-        // TODO(WORKER-READY): Replace with a raw WHERE clause for efficiency at scale.
+        attemptCount: {
+          lt: this.prisma.agentExecution.fields.maxAttempts
+        }
       },
       orderBy: { createdAt: "asc" },
       take: 100
