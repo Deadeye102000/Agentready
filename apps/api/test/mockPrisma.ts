@@ -72,6 +72,11 @@ function genId() {
 // Override prisma client methods
 const mockPrisma = prisma as any;
 
+// Mock Prisma client fields properties for native column comparisons
+mockPrisma.agentExecution.fields = {
+  maxAttempts: { _isField: true, name: 'maxAttempts' }
+};
+
 // Users
 mockPrisma.user.findUnique = async (args: any) => {
   const where = args.where;
@@ -489,11 +494,20 @@ mockPrisma.agentExecution.update = async (args: any) => {
 mockPrisma.agentExecution.findMany = async (args: any) => {
   const where = args.where || {};
   const matches = mockStore.agentExecutions.filter(
-    (e) =>
-      (!where.organizationId || e.organizationId === where.organizationId) &&
-      (!where.projectId || e.projectId === where.projectId) &&
-      (!where.status || e.status === where.status) &&
-      (!where.failureReason || e.failureReason === where.failureReason)
+    (e) => {
+      let isMatch = (!where.organizationId || e.organizationId === where.organizationId) &&
+                    (!where.projectId || e.projectId === where.projectId) &&
+                    (!where.status || e.status === where.status) &&
+                    (!where.failureReason || e.failureReason === where.failureReason);
+
+      if (isMatch && where.attemptCount) {
+        if (where.attemptCount.lt && where.attemptCount.lt._isField && where.attemptCount.lt.name === 'maxAttempts') {
+          isMatch = (e.attemptCount ?? 0) < (e.maxAttempts ?? 1);
+        }
+      }
+
+      return isMatch;
+    }
   );
   return matches.map((e) => {
     const agent = mockStore.agentIdentities.find((a) => a.id === e.agentId);
