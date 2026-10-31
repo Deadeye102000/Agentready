@@ -215,6 +215,15 @@ mockPrisma.task.count = async (args: any) => {
   ).length;
 };
 
+mockPrisma.task.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return (
+    mockStore.tasks.find(
+      (t) => (!where.id || t.id === where.id) && (!where.organizationId || t.organizationId === where.organizationId)
+    ) || null
+  );
+};
+
 mockPrisma.agentIdentity.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentIdentities.filter(
