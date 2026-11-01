@@ -215,6 +215,13 @@ mockPrisma.task.count = async (args: any) => {
   ).length;
 };
 
+mockPrisma.task.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.tasks.find(
+    (t) => (!where.id || t.id === where.id) && (!where.organizationId || t.organizationId === where.organizationId)
+  ) || null;
+};
+
 mockPrisma.agentIdentity.count = async (args: any) => {
   const where = args.where || {};
   return mockStore.agentIdentities.filter(
@@ -247,6 +254,13 @@ mockPrisma.taskContract.count = async (args: any) => {
   return mockStore.taskContracts.filter(
     (c) => (!where.id || c.id === where.id) && (!where.organizationId || c.organizationId === where.organizationId)
   ).length;
+};
+
+mockPrisma.taskContract.findFirst = async (args: any) => {
+  const where = args.where || {};
+  return mockStore.taskContracts.find(
+    (t) => (!where.id || t.id === where.id) && (!where.organizationId || t.organizationId === where.organizationId)
+  ) || null;
 };
 
 mockPrisma.taskContract.create = async (args: any) => {
