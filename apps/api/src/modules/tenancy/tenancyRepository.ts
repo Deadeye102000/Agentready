@@ -4,42 +4,52 @@ export class TenancyRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async projectBelongsToOrganization(input: { organizationId: string; projectId: string }) {
+    // Optimization: findFirst is faster for existence checks than full counts
     return (
-      (await this.prisma.project.count({
-        where: { id: input.projectId, organizationId: input.organizationId }
-      })) === 1
+      (await this.prisma.project.findFirst({
+        where: { id: input.projectId, organizationId: input.organizationId },
+        select: { id: true }
+      })) !== null
     );
   }
 
   async taskBelongsToOrganization(input: { organizationId: string; taskId: string }) {
+    // Optimization: findFirst is faster for existence checks than full counts
     return (
-      (await this.prisma.task.count({
-        where: { id: input.taskId, organizationId: input.organizationId }
-      })) === 1
+      (await this.prisma.task.findFirst({
+        where: { id: input.taskId, organizationId: input.organizationId },
+        select: { id: true }
+      })) !== null
     );
   }
 
   async agentBelongsToOrganization(input: { organizationId: string; agentId: string }) {
+    // Optimization: findFirst is faster for existence checks than full counts
     return (
-      (await this.prisma.agentIdentity.count({
-        where: { id: input.agentId, organizationId: input.organizationId }
-      })) === 1
+      (await this.prisma.agentIdentity.findFirst({
+        where: { id: input.agentId, organizationId: input.organizationId },
+        select: { id: true }
+      })) !== null
     );
   }
 
   async contractBelongsToOrganization(input: { organizationId: string; contractId: string }) {
+    // Optimization: findFirst is faster for existence checks than full counts
     return (
-      (await this.prisma.taskContract.count({
-        where: { id: input.contractId, organizationId: input.organizationId }
-      })) === 1
+      (await this.prisma.taskContract.findFirst({
+        where: { id: input.contractId, organizationId: input.organizationId },
+        select: { id: true }
+      })) !== null
     );
   }
 
   async executionBelongsToOrganization(input: { organizationId: string; executionId: string }) {
+    // Optimization: findFirst is faster for existence checks than full counts
     return (
-      (await this.prisma.agentExecution.count({
-        where: { id: input.executionId, organizationId: input.organizationId }
-      })) === 1
+      (await this.prisma.agentExecution.findFirst({
+        where: { id: input.executionId, organizationId: input.organizationId },
+        select: { id: true }
+      })) !== null
     );
   }
 }
